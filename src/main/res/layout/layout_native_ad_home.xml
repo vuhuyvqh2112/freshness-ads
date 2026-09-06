@@ -13,6 +13,15 @@
         <!-- MediaView chiếm toàn bộ card -->
 
         <!-- Ad badge góc trên trái -->
+        <!--
+          constraintHeight_min chứ không phải android:minHeight: với chiều 0dp (MATCH_CONSTRAINT)
+          thì ConstraintLayout bỏ qua android:minHeight.
+
+          Vì sao cần: template này là full-bleed, MediaView phủ kín card nên chiều cao hoàn toàn do
+          container quyết định. Host cho wrap_content là card co vừa đủ chữ (đo được 70dp) và vùng
+          media tụt dưới mức 120dp Google yêu cầu — AdMob native ad validator báo "MediaView is too
+          small for video". Sàn này giữ đúng ngưỡng chính sách kể cả khi host khai thiếu.
+        -->
         <com.google.android.libraries.ads.mobile.sdk.nativead.MediaView
             android:id="@+id/media_view"
             android:layout_width="0dp"
@@ -20,6 +29,7 @@
             android:scaleType="centerCrop"
             app:layout_constraintBottom_toTopOf="@+id/overlay_gradient"
             app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHeight_min="@dimen/size120"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 

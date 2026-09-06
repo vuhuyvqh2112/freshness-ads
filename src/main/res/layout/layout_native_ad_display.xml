@@ -11,6 +11,10 @@
         android:layout_height="match_parent">
 
         <!-- MediaView full card -->
+        <!--
+          Sàn 120dp cho vùng media, xem giải thích ở layout_native_ad_home.xml. constraintHeight_min
+          chứ không phải android:minHeight vì chiều cao là 0dp (MATCH_CONSTRAINT).
+        -->
         <com.google.android.libraries.ads.mobile.sdk.nativead.MediaView
             android:id="@+id/media_view"
             android:layout_width="0dp"
@@ -18,6 +22,7 @@
             android:scaleType="centerCrop"
             app:layout_constraintBottom_toTopOf="@+id/overlay_gradient"
             app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHeight_min="@dimen/size120"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
