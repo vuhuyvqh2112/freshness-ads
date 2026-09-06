@@ -46,19 +46,25 @@
   .warn { background: #fff4e6; border-left: 3px solid #e8590c; }
   .danger { background: #fff0f0; border-left: 3px solid #c92a2a; }
   .note { background: #e7f5f8; border-left: 3px solid #0b7285; }
+  .new { background: #ebfbee; border-left: 3px solid #2f9e44; }
   .box strong { display: block; margin-bottom: 2pt; }
   .toc { background: #f6f8fa; border: 1px solid #dde3e8; border-radius: 4px; padding: 8pt 12pt; }
   .toc ol { margin: 0 0 0 14pt; font-size: 9.5pt; }
   .page-break { page-break-before: always; }
   hr { border: none; border-top: 1px solid #dde3e8; margin: 18pt 0 0; }
   .footer { font-size: 8.5pt; color: #6b7780; margin-top: 6pt; }
+  .tag {
+    display: inline-block; background: #2f9e44; color: #fff; font-size: 7.5pt;
+    font-weight: 600; padding: 0 4pt; border-radius: 3px; vertical-align: 2px;
+    margin-left: 4pt; letter-spacing: 0.2pt;
+  }
 </style>
 </head>
 <body>
 
 <h1>Freshness Ads</h1>
 <p class="lead">SDK quảng cáo AdMob cho Android — waterfall theo tier, native pool, consent UMP, cấu hình bằng Remote Config.</p>
-<p class="meta">Phiên bản 1.0.0 · Google Mobile Ads Next-Gen SDK 1.2.1 · minSdk 26 · Hướng dẫn sử dụng</p>
+<p class="meta">Phiên bản 1.0.6 · Google Mobile Ads Next-Gen SDK 1.2.1 · minSdk 26 · Hướng dẫn sử dụng</p>
 
 <div class="toc">
 <strong>Nội dung</strong>
@@ -67,6 +73,7 @@
   <li>Cài đặt</li>
   <li>File cấu hình <code>ads_id_config.json</code></li>
   <li>Khởi tạo trong Application</li>
+  <li>Màn chờ trước khi hiện quảng cáo</li>
   <li>Consent (UMP) và luồng splash</li>
   <li>Interstitial</li>
   <li>Native — một slot</li>
@@ -80,6 +87,7 @@
   <li>Mediation Unity Ads</li>
   <li>Test và debug</li>
   <li>Những lỗi làm tụt show rate</li>
+  <li>Thay đổi theo phiên bản</li>
 </ol>
 </div>
 
@@ -114,10 +122,12 @@
 
 <p>Trong <code>app/build.gradle.kts</code>:</p>
 <pre><code>dependencies {
-    implementation("com.github.vuhuyvqh2112:freshness-ads:1.0.0")
+    implementation("com.github.vuhuyvqh2112:freshness-ads:1.0.6")
 }</code></pre>
 
-<p>Không cần khai thêm GMA SDK, UMP, Unity adapter hay Firebase Config — POM của SDK đã mang theo hết.</p>
+<p>Không cần khai thêm GMA SDK, UMP, Unity adapter hay Firebase Config — POM của SDK đã mang theo hết. Từ 1.0.1, <code>androidx.lifecycle</code> cũng đi kèm (khai <code>api</code>) vì <code>bindNativeAdFromCache</code> là extension trên <code>LifecycleOwner</code>.</p>
+
+<p>Phần khung androidx còn lại (<code>appcompat</code>, <code>material</code>, coroutines) app tự khai như bình thường — SDK khai chúng bằng <code>implementation</code> nên không rò sang app.</p>
 
 <h3>2.2 Firebase</h3>
 
@@ -125,8 +135,8 @@
 
 <pre><code>// build.gradle.kts (root)
 plugins {
-    id("com.google.gms.google-services") version "4.5.0" apply false
-    id("com.google.firebase.crashlytics") version "3.0.7" apply false
+    id("com.google.gms.google-services") version "4.4.4" apply false
+    id("com.google.firebase.crashlytics") version "3.0.6" apply false
 }
 
 // app/build.gradle.kts
@@ -136,6 +146,11 @@ plugins {
 }</code></pre>
 
 <p>Đặt <code>google-services.json</code> vào thư mục <code>app/</code>.</p>
+
+<div class="danger">
+<strong>Thiếu plugin Crashlytics là crash ngay lúc khởi động.</strong>
+<code>firebase-crashlytics</code> là eager component: nó khởi tạo bên trong <code>FirebaseApp.initializeApp</code> và ném <code>IllegalStateException: The Crashlytics build ID is missing</code> nếu plugin Gradle chưa được áp. Không phải "thiếu thì mất báo cáo lỗi" — là app không mở được. Hai plugin ở trên đều bắt buộc, không phải tuỳ chọn.
+</div>
 
 <h3>2.3 AdMob app id trong manifest</h3>
 
@@ -229,6 +244,8 @@ Key không có ở cả Remote Config lẫn file assets sẽ resolve ra rỗng, 
                 splashInterstitialPlacement = "inter_splash",
                 // key placement -> số ad giữ sẵn trong pool
                 nativePools = mapOf("native_home" to 1),
+                // SDK tự vẽ màn chờ trước khi bung ad toàn màn (xem mục 5)
+                showDefaultLoadingUi = true,
             ),
         )
 
@@ -256,7 +273,42 @@ Key không có ở cả Remote Config lẫn file assets sẽ resolve ra rỗng, 
     },
 )</code></pre>
 
-<h2>5. Consent (UMP) và luồng splash</h2>
+<h2>5. Màn chờ trước khi hiện quảng cáo <span class="tag">1.0.3+</span></h2>
+
+<p>SDK tự vẽ một màn chờ che toàn màn (nền trắng, spinner xanh) trong lúc nạp interstitial và rewarded, rồi tự tắt ngay khi quảng cáo chiếm màn hình. App không phải làm gì.</p>
+
+<p>Điểm quan trọng: <strong>màn chờ được giữ tối thiểu 500ms trước khi quảng cáo bung ra, kể cả khi ad đã preload sẵn.</strong> Đây không phải để câu giờ — nó là khuyến nghị của chính sách AdMob:</p>
+
+<div class="note">
+<strong>Recommended interstitial implementations — Google AdMob Help</strong>
+“it is recommended that a delay is inserted after the end of a level and before the display of an interstitial ad. This delay could take the form of a <em>loading</em> or <em>please wait</em> screen, or a progress-bar/wheel.”<br><br>
+Mục đích là cho ngón tay đang bấm kịp dừng lại trước khi quảng cáo chiếm màn hình, giảm click nhầm. Google không nêu con số cụ thể; 500ms là lựa chọn của SDK.
+</div>
+
+<p>Đo trên máy thật với ad đã nằm sẵn trong cache: không có khoảng chờ này thì từ lúc bấm tới lúc quảng cáo hiện chỉ <strong>15ms</strong> — người dùng không kịp thấy gì.</p>
+
+<h3>Tuỳ chỉnh</h3>
+
+<table>
+<tr><th>Muốn gì</th><th>Làm sao</th></tr>
+<tr><td>Đổi thời gian chờ tối thiểu</td><td><code>InterAdConfig(minLoadingMs = 800L)</code> / <code>RewardAdConfig(minLoadingMs = 800L)</code>. Đặt <code>0</code> để tắt hẳn khoảng chờ.</td></tr>
+<tr><td>Đổi màu</td><td>Khai lại đúng tên trong <code>res/values/colors.xml</code> của app: <code>ads_loading_background</code>, <code>ads_loading_spinner</code>.</td></tr>
+<tr><td>Tự vẽ giao diện riêng</td><td><code>AdsConfig(showDefaultLoadingUi = false)</code> rồi observe <code>AdsGraph.adLoading.isLoading</code>.</td></tr>
+<tr><td>Tắt màn chờ ở một chỗ</td><td><code>isShowLoading = false</code> trong config của format đó.</td></tr>
+</table>
+
+<pre><code>&lt;!-- Ghi đè màu, đặt trong res/values/colors.xml của app --&gt;
+&lt;color name="ads_loading_background"&gt;#FFFFFFFF&lt;/color&gt;
+&lt;color name="ads_loading_spinner"&gt;#FF1A73E8&lt;/color&gt;</code></pre>
+
+<div class="warn">
+<strong>Tự vẽ thì đừng bỏ khoảng chờ.</strong>
+Tắt <code>showDefaultLoadingUi</code> để dùng giao diện riêng là hợp lý. Nhưng bỏ hẳn khoảng chờ giữa cú chạm và lúc quảng cáo bung ra thì đi ngược khuyến nghị ở trên, và đó đúng là tình huống sinh click nhầm.
+</div>
+
+<div class="page-break"></div>
+
+<h2>6. Consent (UMP) và luồng splash</h2>
 
 <p><code>launchSplashAdFlow</code> làm trọn gói: gom consent (có timeout), rồi hiện interstitial splash nếu placement đó đang bật.</p>
 
@@ -297,16 +349,30 @@ Key không có ở cả Remote Config lẫn file assets sẽ resolve ra rỗng, 
 Policy của Google yêu cầu app có lối vào để đổi/rút lại consent. Kiểm <code>ads.isPrivacyOptionsRequired</code> rồi hiện một mục trong Settings gọi <code>ads.showPrivacyOptionsForm(activity)</code>. Thiếu cái này là rủi ro bị gỡ app.
 </div>
 
+<h3>Chờ SDK khởi tạo xong</h3>
+
+<p>Mọi lệnh load đều chờ <code>MobileAds.initialize</code> hoàn tất trước khi chạm SDK. Ngưỡng chờ khác nhau theo bản chất từng format:</p>
+
+<table>
+<tr><th>Format</th><th>Chờ tối đa</th><th>Vì sao</th></tr>
+<tr><td>Banner, Native</td><td><strong>60 giây</strong></td><td>Bị động, không ai đang chờ. Hiện muộn vẫn hơn không hiện — và không có gì kích hoạt lại lệnh load khi user vẫn ngồi trên màn hình.</td></tr>
+<tr><td>Interstitial, Rewarded</td><td>15 giây</td><td>Có người dùng đang chờ sau spinner. Thà bỏ quảng cáo còn hơn giữ họ lâu hơn.</td></tr>
+<tr><td>App-open</td><td>15 giây</td><td>Hiện muộn 30 giây sau khi user đã vào app thì vô nghĩa.</td></tr>
+</table>
+
+<p>Thấy <code>SKIP … (SDK not ready)</code> trong logcat ngay trước dòng <code>MobileAds (next-gen) initialized</code> nghĩa là init chạy quá lâu — xem mục 16, gần như luôn là do thiếu mediation group.</p>
+
 <div class="page-break"></div>
 
-<h2>6. Interstitial</h2>
+<h2>7. Interstitial</h2>
 
 <pre><code>private val interConfig = InterAdConfig(
     placement = "inter_next_screen",
-    reload = true,        // tự load lại sau khi hiện xong
+    reload = true,          // tự load lại sau khi hiện xong
     retryCount = 2,
     timeOut = 6_000L,
-    isShowLoading = true, // hiện dialog loading trong lúc chờ fill
+    isShowLoading = true,   // màn chờ trong lúc nạp (mục 5)
+    minLoadingMs = 500L,    // giữ màn chờ tối thiểu, kể cả khi ad đã có sẵn
 )
 
 // Warm sớm, ở màn trước đó
@@ -318,11 +384,22 @@ lifecycleScope.launch {
     startActivity(Intent(this@Screen, NextActivity::class.java))
 }</code></pre>
 
-<p><code>showInterAd</code> trả về sau khi user đóng ad, và trả <code>false</code> nếu không có gì để hiện. Luôn đi tiếp bất kể kết quả — đừng chặn điều hướng vì một quảng cáo không fill.</p>
+<h3>Nạp và hiện trong một lệnh <span class="tag">1.0.3+</span></h3>
+
+<p>Chỗ đặt ad không preload trước được (user bấm rồi mới biết cần quảng cáo) thì dùng <code>loadAndShowInterAd</code>:</p>
+
+<pre><code>lifecycleScope.launch {
+    ads.loadAndShowInterAd(interConfig, placement = "inter_next_screen")
+    startActivity(Intent(this@Screen, NextActivity::class.java))
+}</code></pre>
+
+<p>Nó nạp nếu chưa có sẵn rồi hiện, màn chờ che khoảng nạp. Vẫn tôn trọng frequency cap và công tắc placement như <code>showInterAd</code>. Ad đã nằm trong cache thì không phát thêm request nào.</p>
+
+<p><code>showInterAd</code> và <code>loadAndShowInterAd</code> đều trả về sau khi user đóng ad, và trả <code>false</code> nếu không có gì để hiện. Luôn đi tiếp bất kể kết quả — đừng chặn điều hướng vì một quảng cáo không fill.</p>
 
 <p>SDK tự áp <strong>frequency cap</strong> giữa hai interstitial bất kỳ (mặc định 20s, chỉnh bằng <code>settings.interMinIntervalMs</code>). Bấm nhanh qua nhiều màn sẽ không ăn liên tiếp hai quảng cáo toàn màn.</p>
 
-<h2>7. Native — một slot</h2>
+<h2>8. Native — một slot</h2>
 
 <p>Đặt view vào layout. Chọn template theo chỗ đặt:</p>
 
@@ -332,17 +409,24 @@ lifecycleScope.launch {
     android:layout_height="wrap_content" /&gt;</code></pre>
 
 <table>
-<tr><th>Class</th><th>Dùng cho</th></tr>
-<tr><td><code>LoadingNativeAdView1</code> … <code>View4</code></td><td>Bốn bố cục chuẩn, khác nhau ở vị trí media và nút CTA</td></tr>
-<tr><td><code>LoadingNativeAdSmallView</code></td><td>Dải nhỏ, không có ảnh lớn</td></tr>
-<tr><td><code>LoadingNativeAdHomeView</code> / <code>HomeCompactView</code></td><td>Khối trên màn chính</td></tr>
-<tr><td><code>LoadingNativeAdListView</code> / <code>CategoryView</code></td><td>Item chèn giữa danh sách</td></tr>
-<tr><td><code>LoadingNativeCtaTopView</code> / <code>CtaBottomView</code></td><td>CTA nằm trên / dưới</td></tr>
-<tr><td><code>LoadingNativeAdDisplayView</code></td><td>Khối lớn, nhiều ảnh</td></tr>
-<tr><td><code>LoadingNativeFullscreenView</code></td><td>Native chiếm trọn màn</td></tr>
+<tr><th>Class</th><th>Dùng cho</th><th>Chiều cao</th></tr>
+<tr><td><code>LoadingNativeAdView1</code> … <code>View4</code></td><td>Bốn bố cục chuẩn, khác nhau ở vị trí media và nút CTA</td><td>wrap_content</td></tr>
+<tr><td><code>LoadingNativeAdSmallView</code></td><td>Dải nhỏ, không có ảnh lớn</td><td>wrap_content</td></tr>
+<tr><td><code>LoadingNativeAdHomeView</code></td><td>Khối lớn trên màn chính, ảnh phủ kín card</td><td><strong>khai cụ thể</strong></td></tr>
+<tr><td><code>LoadingNativeAdHomeCompactView</code></td><td>Bản gọn của trên, ảnh vuông bên trái</td><td>wrap_content</td></tr>
+<tr><td><code>LoadingNativeAdListView</code> / <code>CategoryView</code></td><td>Item chèn giữa danh sách</td><td>wrap_content</td></tr>
+<tr><td><code>LoadingNativeCtaTopView</code> / <code>CtaBottomView</code></td><td>CTA nằm trên / dưới</td><td>wrap_content</td></tr>
+<tr><td><code>LoadingNativeAdDisplayView</code></td><td>Khối lớn, ảnh phủ kín card</td><td><strong>khai cụ thể</strong></td></tr>
+<tr><td><code>LoadingNativeFullscreenView</code></td><td>Native chiếm trọn màn</td><td>match_parent</td></tr>
 </table>
 
 <p>Tiền tố <code>Loading</code> nghĩa là view đã kèm shimmer: nó tự hiện khung xám trong lúc chờ và tự đổi sang ad khi có.</p>
+
+<div class="warn">
+<strong>Hai template full-bleed cần chiều cao cụ thể.</strong>
+<code>HomeView</code> và <code>DisplayView</code> để <code>MediaView</code> phủ kín card, nên chiều cao hoàn toàn do container quyết định. Cho <code>wrap_content</code> thì card co lại vừa đủ phần chữ và vùng ảnh co theo — đo được 70dp, trong khi Google yêu cầu native có video phải đạt tối thiểu <strong>120×120dp</strong>.<br><br>
+Từ 1.0.5 SDK giữ sàn 120dp nên không còn vi phạm, nhưng vẫn nên khai chiều cao cụ thể (ví dụ <code>260dp</code>) để kiểm soát bố cục thay vì dựa vào sàn.
+</div>
 
 <p>Trong Activity/Fragment:</p>
 
@@ -378,7 +462,7 @@ ads.nativeAdService.preloadIfEmpty(applicationContext, "native_b", "native_b")</
 
 <div class="page-break"></div>
 
-<h2>8. Native — pool cho danh sách</h2>
+<h2>9. Native — pool cho danh sách</h2>
 
 <p>Danh sách chèn nhiều vị trí ad thì dùng <code>AdPoolManager</code>: nó preload sẵn một số ad và phát ngay khi adapter cần, thay vì load trong <code>onBindViewHolder</code> (vừa giật vừa phát dư request).</p>
 
@@ -407,7 +491,7 @@ pool.releaseAd("native_feed", key = "native_feed_$position", owner = holder)</co
 
 <pre><code>lifecycleScope.launch {
     repeatOnLifecycle(Lifecycle.State.STARTED) {
-        pool.adReadyEvents.collect { placement ->
+        pool.adReadyEvents.collect { placement -&gt;
             if (placement == "native_feed") adapter.notifyAdSlotsChanged()
         }
     }
@@ -420,7 +504,7 @@ Màn chỉ có một slot tĩnh mà khai <code>2</code> thì ad thứ hai không
 
 <p><code>owner</code> là tham số quan trọng: RecyclerView có thể tạo holder mới cho cùng một vị trí <em>trước khi</em> holder cũ bị recycle (ItemAnimator còn dựng hẳn holder thứ hai để crossfade). Truyền <code>owner</code> để pool chỉ huỷ ad khi không còn holder nào giữ nó. Không truyền thì holder cũ sẽ huỷ mất ad mà holder mới đang hiển thị, và frame sau crash <em>"trying to use a recycled bitmap"</em>.</p>
 
-<h2>9. Native full màn</h2>
+<h2>10. Native full màn</h2>
 
 <p>Native chiếm trọn màn hình dùng làm fallback khi interstitial không fill, hoặc chèn giữa các bước onboarding. Dựng bằng một Activity riêng:</p>
 
@@ -450,7 +534,7 @@ Màn chỉ có một slot tĩnh mà khai <code>2</code> thì ad thứ hai không
 Nút đóng phải hiện, và BACK phải chạy được. Muốn giữ impression đủ lâu để tính thì hoãn nút đóng vài giây bằng một <code>CountDownTimer</code> — nhưng đừng chặn BACK, và đừng để màn hình nào không thoát được.
 </div>
 
-<h2>10. Banner</h2>
+<h2>11. Banner</h2>
 
 <pre><code>&lt;FrameLayout
     android:id="@+id/bannerContainer"
@@ -466,41 +550,52 @@ Nút đóng phải hiện, và BACK phải chạy được. Muốn giữ impress
     onLoadFail = { binding.bannerContainer.isVisible = false },
 )</code></pre>
 
+<div class="warn">
+<strong>Container banner phải <code>wrap_content</code>.</strong>
+Từ 1.0.1 banner dùng <em>large</em> anchored adaptive — bản Google thay cho API cũ đã deprecated. Nó <strong>cao hơn</strong> anchored thường. Container nào khoá <code>layout_height</code> cứng sẽ cắt mất quảng cáo.
+</div>
+
 <p><code>isCollapsible = true</code> cho banner thu gọn được (user bấm mũi tên để xếp lại). Chỉ dùng ở banner neo đáy, và đừng dùng ở màn mà user quay lại liên tục — banner collapsible bung ra mỗi lần load là gây khó chịu.</p>
 
 <div class="page-break"></div>
 
-<h2>11. Rewarded</h2>
+<h2>12. Rewarded</h2>
 
 <pre><code>private val rewardConfig = RewardAdConfig(
     placement = "reward_unlock",
     retryCount = 2,
     timeOut = 20_000L,
     isShowLoading = true,
+    minLoadingMs = 500L,
 )
-
-ads.loadRewardAd(rewardConfig)   // warm trước
 
 lifecycleScope.launch {
     var earned = false
-    val shown = ads.showRewardAd(
+    val shown = ads.loadAndShowRewardAd(
         config = rewardConfig,
         placement = "reward_unlock",
-        onShow = { /* quảng cáo đã hiện toàn màn — tắt spinner của bạn ở đây */ },
+        onShow = { /* quảng cáo đã hiện toàn màn */ },
         onReward = { earned = true },
     )
     if (shown &amp;&amp; earned) unlockFeature()
     else showCouldNotLoadMessage()
 }</code></pre>
 
+<p><code>loadAndShowRewardAd</code> <span class="tag">1.0.3+</span> hợp với rewarded hơn cả: người dùng bấm “xem quảng cáo nhận thưởng” xong mới cần tới ad, nên preload trước thường chỉ tạo request không đổi được impression. Vẫn có <code>loadRewardAd</code> + <code>showRewardAd</code> nếu muốn tách hai bước.</p>
+
+<div class="new">
+<strong><code>onShow</code> và <code>onReward</code> chạy trên main thread.</strong> <span class="tag">1.0.3+</span>
+GMA Next-Gen bắn hai callback này trên luồng nền của nó. Trước 1.0.3, SDK chuyển thẳng cho app nên mọi thao tác UI trong đó đều crash (<code>Can't toast on a thread that has not called Looper.prepare()</code>). Nay SDK đưa về main trước khi giao cho app — cộng thưởng, cập nhật UI, ghi storage đều làm thẳng trong callback được.
+</div>
+
 <div class="warn">
-<strong>Đừng chờ giá trị trả về để tắt spinner.</strong>
-<code>showRewardAd</code> chỉ trả về <em>sau khi</em> user đóng quảng cáo. Call site nào đang giữ spinner chờ fill mà đợi giá trị trả về thì spinner nằm dưới quảng cáo suốt cả video rồi loé lên một nhịp lúc đóng. Dùng <code>onShow</code>.
+<strong>Đừng chờ giá trị trả về để tắt spinner của bạn.</strong>
+Hàm chỉ trả về <em>sau khi</em> user đóng quảng cáo. Call site nào đang giữ spinner riêng mà đợi giá trị trả về thì spinner nằm dưới quảng cáo suốt cả video rồi loé lên một nhịp lúc đóng. Dùng <code>onShow</code>. (Màn chờ mặc định của SDK ở mục 5 tự tắt đúng lúc, không cần xử lý.)
 </div>
 
 <p>Và: hỏi quyền / kiểm điều kiện <strong>trước</strong> khi mở quảng cáo. Bắt user xem hết video rồi mới báo "thiếu quyền" là lừa họ bỏ công lấy một thứ không nhận được.</p>
 
-<h2>12. App-open</h2>
+<h2>13. App-open</h2>
 
 <p>App-open ad hiện khi user quay lại app từ background. SDK tự theo dõi vòng đời process; app chỉ cần cung cấp một Activity đục để che nội dung:</p>
 
@@ -530,7 +625,7 @@ class OpenAdActivity : AppCompatActivity() {
 Policy AdMob không cho user thấy nội dung app phía sau app-open ad. Không có Activity che là vi phạm.
 </div>
 
-<h2>13. Remote Config</h2>
+<h2>14. Remote Config</h2>
 
 <p>SDK đọc <strong>đúng một</strong> key Firebase Remote Config: <code>ads_id_config</code>. Giá trị là toàn bộ JSON ở mục 3.</p>
 
@@ -549,7 +644,7 @@ JSON rỗng, null hoặc parse lỗi đều bị bỏ qua và catalog giữ nguy
 
 <div class="page-break"></div>
 
-<h2>14. ProGuard / R8</h2>
+<h2>15. ProGuard / R8</h2>
 
 <p>Rule của SDK đi kèm trong AAR (<code>consumer-rules.pro</code>), tự áp vào app khi minify. Không phải chép gì.</p>
 
@@ -560,19 +655,22 @@ JSON rỗng, null hoặc parse lỗi đều bị bỏ qua và catalog giữ nguy
 <pre><code>-keep class * extends androidx.room.RoomDatabase { &lt;init&gt;(); }</code></pre>
 </div>
 
-<h2>15. Mediation Unity Ads</h2>
+<h2>16. Mediation Unity Ads</h2>
 
 <p>Adapter Unity đã nằm trong SDK. Không cần khai gì trong manifest, không cần code init — adapter tự nhận cấu hình từ mediation group phía AdMob lúc chạy.</p>
 
 <div class="danger">
 <strong>Phải tạo mediation group trên AdMob TRƯỚC khi phát hành.</strong>
-Chưa có group thì adapter nhận cấu hình rỗng, nó init bằng một app id giả và <em>giữ luôn callback init của GMA</em>. Đo thực tế: <code>MobileAds.initialize</code> mất ~30 giây thay vì ~2,2 giây — đủ để mọi request đầu phiên thấy "SDK not ready" và interstitial splash không bao giờ kịp hiện.<br><br>
-Triệu chứng nhìn giống hệt lỗi code, nhưng nguyên nhân nằm ở cấu hình phía AdMob.
+Chưa có group thì adapter nhận cấu hình rỗng, nó init bằng một app id giả và <em>giữ luôn callback init của GMA</em>. Đo thực tế: <code>MobileAds.initialize</code> mất ~30 giây thay vì ~2,2 giây.<br><br>
+Dấu hiệu trong logcat: <code>SKIP banner … (SDK not ready)</code> hoặc <code>WATERFALL skip … (SDK not ready)</code> xuất hiện ngay trước <code>MobileAds (next-gen) initialized</code>. Banner và native chờ tới 60 giây nên vẫn lên sau khi init xong, nhưng interstitial và rewarded chỉ chờ 15 giây (có user đang đợi sau spinner) nên vẫn mất.<br><br>
+Sửa ở AdMob, đừng nới thời gian chờ. Triệu chứng nhìn giống hệt lỗi code, nhưng nguyên nhân nằm ở cấu hình phía AdMob.
 </div>
 
 <p>Version của adapter và của Unity SDK phải đi thành cặp: ba số đầu của adapter khớp version SDK nó bọc (adapter <code>4.18.0.x</code> bọc <code>unity-ads 4.18.0</code>). SDK này ghim cặp <code>4.18</code> vì đó là cấu hình đã chạy production cùng GMA next-gen <code>1.2.1</code>. Đừng nâng lên bản mới hơn chỉ vì nó mới hơn — adapter mediation phải khớp với GMA next-gen, và chuyện đó chỉ kiểm được bằng một app đang sống.</p>
 
-<h2>16. Test và debug</h2>
+<p>Từ 1.0.1, SDK cũng ghim <code>adquality-sdk</code> ở <code>9.9.0</code>: <code>unity-ads</code> khai phụ thuộc này bằng dải động <code>(,10.0.0)</code>, không ghim thì mỗi lần build có thể ra một version khác mà không ai đổi dòng nào.</p>
+
+<h2>17. Test và debug</h2>
 
 <p>Debug build <strong>mặc định ép test id của Google</strong>, bất kể id thật trong config. Nhờ vậy dev không bao giờ vô tình bấm vào quảng cáo thật (dẫn tới khoá tài khoản AdMob).</p>
 
@@ -584,7 +682,31 @@ Triệu chứng nhìn giống hệt lỗi code, nhưng nguyên nhân nằm ở c
 <p>Log: SDK dùng Timber và chỉ plant cây log ở build debuggable, nên release không in gì. Lọc theo tag:</p>
 <pre><code>adb logcat -s NativeAds AdPool OpenAdProvider AdsManager AdsInitializer</code></pre>
 
-<h2>17. Những lỗi làm tụt show rate</h2>
+<h3>AdMob native ad validator</h3>
+
+<p>Trên test device, Google tự hiện một bong bóng cạnh mỗi native ad để chấm bố cục. Đây là cách duy nhất thấy được các vi phạm bố cục native — <strong>bản release không cảnh báo gì, quảng cáo vẫn hiện bình thường</strong>, nên lỗi loại này rất dễ đi thẳng ra production.</p>
+
+<p>Hai lỗi hay gặp và cách sửa:</p>
+
+<table>
+<tr><th>Validator báo</th><th>Nghĩa là</th><th>Sửa</th></tr>
+<tr>
+  <td><code>MediaView is too small for video</code></td>
+  <td>Vùng media dưới 120×120dp</td>
+  <td>Cho view native một chiều cao cụ thể, đừng để <code>wrap_content</code> với template full-bleed (mục 8)</td>
+</tr>
+<tr>
+  <td><code>Advertiser assets outside native ad view</code></td>
+  <td>Có asset tràn ra ngoài biên <code>NativeAdView</code></td>
+  <td>Thường do container cha bị khoá chiều cao nhỏ hơn nội dung bên trong</td>
+</tr>
+</table>
+
+<p>Bấm <em>See issues</em> trên bong bóng để xem chi tiết. Dùng chính template có sẵn của SDK thì cả 13 template đều được chấm “No implementation issues found”.</p>
+
+<div class="page-break"></div>
+
+<h2>18. Những lỗi làm tụt show rate</h2>
 
 <p>Show rate = impression ÷ matched request. Con số thấp nghĩa là bạn xin ad về rồi không dùng — và AdMob nhìn thấy điều đó.</p>
 
@@ -615,6 +737,11 @@ Triệu chứng nhìn giống hệt lỗi code, nhưng nguyên nhân nằm ở c
   <td><code>retryCount</code> lớn làm id chính fill muộn, tới lúc đó user đã rời splash</td>
   <td>Đặt <code>retryCount = 1</code>, để waterfall tuần tự xuống tier sau</td>
 </tr>
+<tr>
+  <td>Rewarded preload nhiều mà ít show</td>
+  <td>Preload sẵn cho một nút hiếm ai bấm</td>
+  <td>Dùng <code>loadAndShowRewardAd</code>: bấm rồi mới nạp, màn chờ che khoảng nạp</td>
+</tr>
 </table>
 
 <h3>Nguyên tắc gọn</h3>
@@ -626,8 +753,44 @@ Triệu chứng nhìn giống hệt lỗi code, nhưng nguyên nhân nằm ở c
   <li>Đừng chặn điều hướng vì một quảng cáo. Ad không về thì cho user đi tiếp.</li>
 </ul>
 
+<h2>19. Thay đổi theo phiên bản</h2>
+
+<table>
+<tr><th>Bản</th><th>Thay đổi</th><th>Cần làm gì khi nâng cấp</th></tr>
+<tr>
+  <td><strong>1.0.1</strong></td>
+  <td>Banner chuyển sang <em>large</em> anchored adaptive (API cũ đã deprecated). Ghim <code>adquality-sdk</code> 9.9.0. UMP 3.2.0 → 4.0.0. <code>lifecycle-runtime-ktx</code> chuyển sang <code>api</code>.</td>
+  <td>Kiểm container banner để <code>wrap_content</code> — banner cao hơn trước.</td>
+</tr>
+<tr>
+  <td><strong>1.0.2</strong></td>
+  <td>Banner và native chờ init 60 giây thay vì 15, để không mất trắng khi <code>MobileAds.initialize</code> chạy lâu.</td>
+  <td>Không cần làm gì.</td>
+</tr>
+<tr>
+  <td><strong>1.0.3</strong></td>
+  <td>SDK tự vẽ màn chờ, giữ tối thiểu 500ms. Thêm <code>loadAndShowInterAd</code> / <code>loadAndShowRewardAd</code>. <code>onShow</code> và <code>onReward</code> được đưa về main thread.</td>
+  <td>App đang tự vẽ màn chờ riêng thì đặt <code>showDefaultLoadingUi = false</code> để khỏi có hai spinner chồng nhau.</td>
+</tr>
+<tr>
+  <td><strong>1.0.4</strong></td>
+  <td>Sửa lỗi màn chờ không tắt khi quảng cáo hiện. Màn chờ đổi sang nền trắng, spinner xanh.</td>
+  <td>Đang dùng 1.0.3 thì nên nâng — lỗi cũ làm spinner hiện lại sau khi đóng quảng cáo.</td>
+</tr>
+<tr>
+  <td><strong>1.0.5</strong></td>
+  <td>Giữ sàn 120dp cho <code>MediaView</code> ở hai template full-bleed.</td>
+  <td>Đang dùng <code>HomeView</code>/<code>DisplayView</code> với <code>wrap_content</code> thì card sẽ cao hơn — kiểm lại bố cục.</td>
+</tr>
+<tr>
+  <td><strong>1.0.6</strong></td>
+  <td>Sửa <code>CtaTopView</code> tràn asset ra ngoài native ad view và chữ body không đọc được. Thêm lớp phủ tối cho <code>FullscreenView</code>.</td>
+  <td>Đang dùng <code>CtaTopView</code> thì card cao thêm 5dp và chữ body đổi màu.</td>
+</tr>
+</table>
+
 <hr>
-<p class="footer">Freshness Ads 1.0.0 — <code>com.github.vuhuyvqh2112:freshness-ads</code></p>
+<p class="footer">Freshness Ads 1.0.6 — <code>com.github.vuhuyvqh2112:freshness-ads</code></p>
 
 </body>
 </html>

@@ -4,7 +4,7 @@ SDK quảng cáo AdMob cho Android — waterfall theo tier, native pool, consent
 
 Xây trên **Google Mobile Ads Next-Gen SDK 1.2.1**. minSdk 26.
 
-📄 **[Hướng dẫn sử dụng đầy đủ (PDF)](docs/huong-dan-su-dung-freshness-ads.pdf)** — 15 trang, có ví dụ cho từng format.
+📄 **[Hướng dẫn sử dụng đầy đủ (PDF)](docs/huong-dan-su-dung-freshness-ads.pdf)** — 20 trang, có ví dụ cho từng format và lịch sử thay đổi theo phiên bản.
 
 ---
 
