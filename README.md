@@ -25,7 +25,7 @@ dependencyResolutionManagement {
 `app/build.gradle.kts`:
 
 ```kotlin
-implementation("com.github.vuhuyvqh2112:freshness-ads:1.0.0")
+implementation("com.github.vuhuyvqh2112:freshness-ads:1.0.1")
 ```
 
 Không cần khai thêm GMA SDK, UMP, Unity adapter hay Firebase Config — POM đã mang theo hết.
@@ -69,7 +69,7 @@ ads.showInterAd(config, placement = "inter_next")
 ads.nativeAdService.preloadIfEmpty(context, key = "native_detail", placement = "native_detail")
 bindNativeAdFromCache(binding.nativeAd, ads.nativeAdService, "native_detail", releaseOnDestroy = true)
 
-// Banner
+// Banner — container để wrap_content, xem ghi chú chiều cao ở dưới
 ads.bannerAdService.loadBannerAds(this, binding.bannerContainer, "banner_home", isCollapsible = false)
 
 // Rewarded
@@ -98,6 +98,8 @@ Tên placement do app tự đặt. Riêng hai key SDK tự gọi (`open_all`, `i
 ## Hai điều dễ hỏng nhất
 
 **Mediation Unity Ads** — phải tạo mediation group trên AdMob **trước khi phát hành**. Chưa có group thì adapter init bằng app id giả và giữ luôn callback init của GMA: `MobileAds.initialize` mất ~30 giây thay vì ~2,2 giây, đủ để interstitial splash không bao giờ kịp hiện. Triệu chứng nhìn giống lỗi code nhưng nguyên nhân ở cấu hình AdMob.
+
+**Container banner phải `wrap_content`.** Từ 1.0.1 banner dùng *large* anchored adaptive (bản Google thay cho API cũ đã deprecated) — **cao hơn trước**. Container nào khoá `layout_height` cứng sẽ cắt mất quảng cáo.
 
 **Pool size phải bằng số slot hiển thị cùng lúc.** Màn một slot mà khai `2` thì ad thứ hai không có đường ra — mỗi phiên phát dư một request không bao giờ đổi được impression, show rate tụt thẳng.
 

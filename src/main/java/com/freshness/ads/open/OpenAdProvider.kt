@@ -176,8 +176,8 @@ class OpenAdProvider constructor(
                     it.safeResume(true)
                 }
 
-                override fun onAdFailedToLoad(loadAdError: LoadAdError) {
-                    Timber.d("OpenAdProvider onAdFailedToLoad: %s", loadAdError.message)
+                override fun onAdFailedToLoad(adError: LoadAdError) {
+                    Timber.d("OpenAdProvider onAdFailedToLoad: %s", adError.message)
                     it.safeResume(false)
                 }
             },
@@ -242,12 +242,14 @@ class OpenAdProvider constructor(
                         it.safeResume(true)
                     }
 
-                    override fun onAdFailedToShowFullScreenContent(adError: FullScreenContentError) {
+                    override fun onAdFailedToShowFullScreenContent(
+                        fullScreenContentError: FullScreenContentError
+                    ) {
                         appOpenAd = null
                         isShowingAd = false
                         Timber.d(
                             "OpenAdProvider onAdFailedToShowFullScreenContent: %s",
-                            adError.message
+                            fullScreenContentError.message
                         )
                         if (googleMobileAdsConsentManager.canRequestAds) {
                             loadAd()

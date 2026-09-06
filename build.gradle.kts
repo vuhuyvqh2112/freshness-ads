@@ -7,7 +7,7 @@ plugins {
 // com.github.<user> and the artifact id the repository name. Publishing under any
 // other coordinate builds fine locally and then 404s on JitPack.
 group = "com.github.vuhuyvqh2112"
-version = "1.0.0"
+version = "1.0.1"
 
 android {
     namespace = "com.freshness.ads"
@@ -48,9 +48,12 @@ dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.constraintlayout)
     implementation(libs.material)
-    // ProcessLifecycleOwner (app-open ad) + lifecycleScope/repeatOnLifecycle trong extensions.
+    // ProcessLifecycleOwner (app-open ad): dùng nội bộ, không lộ ra chữ ký nào.
     implementation(libs.androidx.lifecycle.process)
-    implementation(libs.androidx.lifecycle.runtime.ktx)
+    // `api` vì lifecycle nằm trong API SURFACE: bindNativeAdFromCache/observeNativeAd là extension
+    // public trên LifecycleOwner. Để `implementation` thì app host không gọi được nếu chưa tự khai
+    // lifecycle.
+    api(libs.androidx.lifecycle.runtime.ktx)
     // Fragment.weakActivity trong AdsExtensions.
     implementation(libs.androidx.fragment.ktx)
     implementation(libs.kotlinx.coroutines.android)
@@ -88,6 +91,15 @@ dependencies {
     implementation(libs.unity.ads)
 
     testImplementation(libs.junit)
+
+    // unity-ads kéo adquality-sdk bằng dải động `(,10.0.0)`. Constraint (không phải implementation
+    // trực tiếp) để vừa ghim được version vừa không tự thêm một phụ thuộc mà SDK không dùng đến —
+    // constraint theo vào Gradle metadata nên app host cũng hưởng version đã ghim.
+    constraints {
+        implementation(libs.unity.adquality) {
+            because("dải động (,10.0.0) khiến build không reproducible")
+        }
+    }
 }
 
 publishing {

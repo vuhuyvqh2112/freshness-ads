@@ -119,10 +119,15 @@ class AdsBannerProvider constructor(
         val id = ids[index]
         val adView = AdView(context)
 
-        // Full-width anchored adaptive banner for the current orientation.
+        // Full-width large anchored adaptive banner.
+        //
+        // getCurrentOrientationAnchoredAdaptiveBannerAdSize đã deprecated; Google thay bằng bản
+        // "large". CHIỀU CAO TĂNG so với anchored thường (Google đổi mặc định để lấy thêm doanh
+        // thu), nên container banner nào đang khoá chiều cao cứng sẽ cắt mất quảng cáo — để
+        // wrap_content. Kích thước vẫn tự chọn theo bề ngang và xoay màn hình như trước.
         val displayMetrics = Resources.getSystem().displayMetrics
         val widthDp = (displayMetrics.widthPixels / displayMetrics.density).toInt()
-        val adSize = AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(context, widthDp)
+        val adSize = AdSize.getLargeAnchoredAdaptiveBannerAdSize(context, widthDp)
 
         // NOTE: collapsible banner config differs in the next-gen SDK and is not yet
         // wired here; [isCollapsible] currently loads a standard anchored banner.

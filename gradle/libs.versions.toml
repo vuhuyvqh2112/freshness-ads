@@ -10,7 +10,9 @@ junit = "4.13.2"
 
 coroutines = "1.10.2"
 adsMobileSdk = "1.2.1"
-userMessagingPlatform = "3.2.0"
+# Khớp đúng bản ads-mobile-sdk 1.2.1 kéo về. Khai thấp hơn thì Gradle vẫn nâng lên 4.0.0, chỉ tổ
+# làm người đọc catalog tưởng code chạy trên API của 3.2.0.
+userMessagingPlatform = "4.0.0"
 gson = "2.11.0"
 timber = "5.0.1"
 shimmer = "0.5.0"
@@ -24,6 +26,11 @@ firebaseBom = "34.17.0"
 # kiểm được bằng một app đang sống.
 unityAdapter = "4.18.0.0"
 unityAds = "4.18.0"
+
+# unity-ads khai adquality-sdk bằng dải động `(,10.0.0)`: không ghim thì mỗi lần build có thể ra một
+# version khác mà không ai đổi dòng nào, và một bản lỗi phía Unity tự chui thẳng vào release. Ghim
+# đúng bản dải đó đang trả về.
+unityAdQuality = "9.9.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -48,6 +55,7 @@ firebase-crashlytics = { group = "com.google.firebase", name = "firebase-crashly
 
 mediation-unity = { group = "com.google.ads.mediation", name = "unity", version.ref = "unityAdapter" }
 unity-ads = { group = "com.unity3d.ads", name = "unity-ads", version.ref = "unityAds" }
+unity-adquality = { group = "com.unity3d.ads-mediation", name = "adquality-sdk", version.ref = "unityAdQuality" }
 
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 

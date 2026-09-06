@@ -122,6 +122,9 @@ class InterAdProvider constructor(
     }
 
     /** Tier quá hạn: request vẫn chạy nền, fill về muộn được nhét vào cache cho lần showAd sau. */
+    // getCompleted chỉ hợp lệ bên trong invokeOnCompletion khi error == null, tức job đã xong và
+    // không hủy — đúng điều kiện API này đòi.
+    @OptIn(ExperimentalCoroutinesApi::class)
     private fun keepLateAd(config: InterAdConfig, tierJob: Deferred<InterstitialAd?>) {
         tierJob.invokeOnCompletion { error ->
             if (error != null) return@invokeOnCompletion
@@ -201,7 +204,9 @@ class InterAdProvider constructor(
                         continuation.safeResume(true)
                     }
 
-                    override fun onAdFailedToShowFullScreenContent(adError: FullScreenContentError) {
+                    override fun onAdFailedToShowFullScreenContent(
+                        fullScreenContentError: FullScreenContentError
+                    ) {
                         Timber.e("Hito::onAdFailedToShowFullScreenContent")
                         _isShowing.value = false
                         reloadAd(config)

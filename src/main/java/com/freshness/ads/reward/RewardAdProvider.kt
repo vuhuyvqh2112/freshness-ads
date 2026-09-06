@@ -133,6 +133,9 @@ class RewardAdProvider constructor(
         return null
     }
 
+    // getCompleted chỉ hợp lệ bên trong invokeOnCompletion khi error == null, tức job đã xong và
+    // không hủy — đúng điều kiện API này đòi.
+    @OptIn(ExperimentalCoroutinesApi::class)
     private fun keepLateAd(config: RewardAdConfig, tierJob: Deferred<RewardedAd?>) {
         tierJob.invokeOnCompletion { error ->
             if (error != null) return@invokeOnCompletion
@@ -229,7 +232,9 @@ class RewardAdProvider constructor(
                         continuation.safeResume(true)
                     }
 
-                    override fun onAdFailedToShowFullScreenContent(adError: FullScreenContentError) {
+                    override fun onAdFailedToShowFullScreenContent(
+                        fullScreenContentError: FullScreenContentError
+                    ) {
                         Timber.e("Hito::onAdFailedToShowFullScreenContent")
                         _isShowing.value = false
                         showInProgress = false
