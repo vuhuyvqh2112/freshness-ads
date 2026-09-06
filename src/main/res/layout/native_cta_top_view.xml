@@ -55,10 +55,15 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/cta" />
 
+        <!--
+          Chiều cao phải bằng icon bên trong (55dp). Trước đây để 50dp nên icon và body tràn ra
+          ngoài biên NativeAdView, AdMob native ad validator báo "Advertiser assets outside native
+          ad view" — vi phạm chính sách, mà cảnh báo đó chỉ hiện trên test device nên rất dễ lọt.
+        -->
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/middle"
             android:layout_width="0dp"
-            android:layout_height="@dimen/size50"
+            android:layout_height="@dimen/size55"
             android:layout_marginBottom="@dimen/size2"
             android:layout_marginHorizontal="@dimen/size12"
             android:layout_marginTop="@dimen/size5"
@@ -69,8 +74,8 @@
 
             <ImageView
                 android:id="@+id/icon"
-                android:layout_width="64dp"
-                android:layout_height="55dp"
+                android:layout_width="@dimen/size55"
+                android:layout_height="@dimen/size55"
                 android:scaleType="fitCenter"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
@@ -92,13 +97,15 @@
                 app:layout_constraintTop_toTopOf="parent"
                 tools:text="Nhận học bổng du học Mỹ" />
 
+            <!-- Card nền sáng: chữ trắng gần như không đọc được. Dùng cùng màu body với
+                 native_cta_bottom_view. -->
             <TextView
                 android:id="@+id/body"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="@dimen/size8"
                 android:maxLines="2"
-                android:textColor="@color/gnt_white"
+                android:textColor="@color/text_color_second"
                 android:textSize="@dimen/size12"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"

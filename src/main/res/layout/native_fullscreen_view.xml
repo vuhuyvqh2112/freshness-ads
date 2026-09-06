@@ -21,6 +21,22 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
+        <!--
+          Lớp phủ tối ở đáy. MediaView ở template này phủ kín cả view, nên tiêu đề và body bị vẽ
+          thẳng lên ảnh quảng cáo — ảnh sáng hoặc nhiều chi tiết là chữ lẫn hết vào nền.
+
+          Khai NGAY SAU media_view và TRƯỚC các view chữ: thứ tự khai quyết định thứ tự vẽ, nên nó
+          nằm trên ảnh mà vẫn dưới chữ.
+        -->
+        <View
+            android:id="@+id/bottom_scrim"
+            android:layout_width="0dp"
+            android:layout_height="@dimen/size200"
+            android:background="@drawable/gradient_bottom_dark"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent" />
+
         <androidx.appcompat.widget.AppCompatTextView
             android:id="@+id/cta"
             android:layout_width="0dp"
@@ -59,7 +75,7 @@
             android:layout_marginBottom="@dimen/size10"
             android:ellipsize="end"
             android:maxLines="3"
-            android:textColor="@color/text_color_second"
+            android:textColor="@color/ads_fullscreen_body"
             android:textSize="@dimen/size12"
             android:visibility="visible"
             app:layout_constraintBottom_toTopOf="@+id/cta"
@@ -75,7 +91,7 @@
             android:layout_marginBottom="@dimen/size5"
             android:ellipsize="end"
             android:lines="1"
-            android:textColor="@color/text_color_primary"
+            android:textColor="@color/ads_fullscreen_title"
             android:textSize="@dimen/size17"
             android:textStyle="bold"
             app:layout_constraintBottom_toTopOf="@+id/body"
