@@ -35,8 +35,21 @@ object AdInitGate {
     private val _state = MutableStateFlow(State.Pending)
 
     /** Default ceiling for load-site waits — generous enough to cover a slow
-     *  init on a cold start, short enough never to hang a screen indefinitely. */
+     *  init on a cold start, short enough never to hang a screen indefinitely.
+     *
+     *  Dùng cho format do NGƯỜI DÙNG kích hoạt (interstitial, rewarded): có người đang ngồi chờ sau
+     *  một spinner, nên thà bỏ quảng cáo còn hơn giữ họ lâu hơn nữa. */
     const val DEFAULT_AWAIT_TIMEOUT_MS = 15_000L
+
+    /**
+     * Ceiling cho format BỊ ĐỘNG (banner, native): không ai đang chờ, và không có gì kích hoạt lại
+     * lệnh load khi người dùng vẫn ngồi trên màn hình — hết giờ là chỗ đặt ad trống nguyên phiên.
+     *
+     * Rộng hơn [DEFAULT_AWAIT_TIMEOUT_MS] vì `MobileAds.initialize` có thể mất ~30 giây khi adapter
+     * Unity chưa có mediation group trên AdMob (nó giữ luôn callback init của GMA). Ngưỡng 15s ngắn
+     * hơn chính khoảng đó, nên cold start nào rơi vào tình huống ấy cũng mất sạch banner + native.
+     */
+    const val PASSIVE_AWAIT_TIMEOUT_MS = 60_000L
 
     // Main.immediate so callback-based SDK loads (NativeAdLoader, AdView) run on
     // the main thread, and run synchronously when the gate is already resolved.

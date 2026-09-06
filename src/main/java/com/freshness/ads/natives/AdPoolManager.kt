@@ -189,7 +189,7 @@ class AdPoolManager constructor(
     private fun retryWhenSdkReady(placement: String) {
         if (!awaitingSdk.add(placement)) return // already waiting for this placement
         scope.launch {
-            val ready = AdInitGate.awaitReady(timeoutMs = 60_000L)
+            val ready = AdInitGate.awaitReady(timeoutMs = AdInitGate.PASSIVE_AWAIT_TIMEOUT_MS)
             awaitingSdk.remove(placement)
             if (ready) {
                 Timber.d("AdPool[$placement]: SDK became ready, retrying preload")

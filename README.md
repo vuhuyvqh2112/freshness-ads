@@ -25,7 +25,7 @@ dependencyResolutionManagement {
 `app/build.gradle.kts`:
 
 ```kotlin
-implementation("com.github.vuhuyvqh2112:freshness-ads:1.0.1")
+implementation("com.github.vuhuyvqh2112:freshness-ads:1.0.2")
 ```
 
 Không cần khai thêm GMA SDK, UMP, Unity adapter hay Firebase Config — POM đã mang theo hết.
@@ -98,6 +98,8 @@ Tên placement do app tự đặt. Riêng hai key SDK tự gọi (`open_all`, `i
 ## Hai điều dễ hỏng nhất
 
 **Mediation Unity Ads** — phải tạo mediation group trên AdMob **trước khi phát hành**. Chưa có group thì adapter init bằng app id giả và giữ luôn callback init của GMA: `MobileAds.initialize` mất ~30 giây thay vì ~2,2 giây, đủ để interstitial splash không bao giờ kịp hiện. Triệu chứng nhìn giống lỗi code nhưng nguyên nhân ở cấu hình AdMob.
+
+Dấu hiệu nhận biết trong logcat — `SKIP banner … (SDK not ready)` hoặc `WATERFALL skip … (SDK not ready)` ngay trước dòng `MobileAds (next-gen) initialized`. Banner/native chờ tới 60 giây nên vẫn lên sau khi init xong, nhưng interstitial và rewarded chỉ chờ 15 giây (có người dùng đang đợi sau spinner) nên vẫn mất. Sửa ở AdMob, đừng nới thời gian chờ.
 
 **Container banner phải `wrap_content`.** Từ 1.0.1 banner dùng *large* anchored adaptive (bản Google thay cho API cũ đã deprecated) — **cao hơn trước**. Container nào khoá `layout_height` cứng sẽ cắt mất quảng cáo.
 

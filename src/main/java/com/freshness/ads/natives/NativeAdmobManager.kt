@@ -51,6 +51,9 @@ object NativeAdmobManager {
         }
 
         AdInitGate.whenReady(
+            // Native cũng bị động như banner: hết giờ là slot nằm shimmer tới hết phiên vì không có
+            // gì kích hoạt lại lệnh load.
+            timeoutMs = AdInitGate.PASSIVE_AWAIT_TIMEOUT_MS,
             onUnavailable = {
                 Timber.w("$TAG WATERFALL skip placement=$placement (SDK not ready)")
                 onLoadFail()

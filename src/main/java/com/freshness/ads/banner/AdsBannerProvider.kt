@@ -84,6 +84,10 @@ class AdsBannerProvider constructor(
         // Defer touching the SDK (AdView construction + load) until MobileAds.initialize
         // has completed; otherwise the next-gen SDK throws IllegalStateException.
         AdInitGate.whenReady(
+            // Banner là format bị động: không ai đang chờ, và không có gì gọi lại loadBannerAds khi
+            // người dùng vẫn ở trên màn hình. Bỏ cuộc ở ngưỡng mặc định là container trống nguyên
+            // phiên, kể cả khi init xong ngay sau đó.
+            timeoutMs = AdInitGate.PASSIVE_AWAIT_TIMEOUT_MS,
             onUnavailable = {
                 Timber.w("$TAG SKIP banner $placement (SDK not ready)")
                 onLoadFail?.invoke()
