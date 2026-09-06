@@ -57,6 +57,21 @@ interface AdsManagerService {
     fun loadInterAd(config: InterAdConfig)
 
     /**
+     * Nạp (nếu chưa có sẵn) rồi hiện interstitial trong một lệnh.
+     *
+     * Dùng cho chỗ đặt ad không preload trước được — người dùng bấm rồi mới biết cần quảng cáo.
+     * Màn chờ che khoảng nạp; nếu ad đã nằm sẵn trong cache thì nó vẫn hiện đủ
+     * [InterAdConfig.minLoadingMs] trước khi quảng cáo bung.
+     *
+     * Vẫn tôn trọng frequency cap và công tắc placement như [showInterAd].
+     */
+    suspend fun loadAndShowInterAd(
+        config: InterAdConfig,
+        placement: String? = null,
+        onShow: () -> Unit = {}
+    ): Boolean
+
+    /**
      * Show rewarded ad with remote config check.
      *
      * @param onShow bắn đúng lúc quảng cáo đã hiện toàn màn. Cần callback này chứ không thể chờ hàm
@@ -75,6 +90,20 @@ interface AdsManagerService {
      * Load rewarded ad
      */
     fun loadRewardAd(config: RewardAdConfig)
+
+    /**
+     * Nạp (nếu chưa có sẵn) rồi hiện rewarded trong một lệnh.
+     *
+     * Đây là cách dùng tự nhiên nhất của rewarded: người dùng bấm "xem quảng cáo nhận thưởng" xong
+     * mới cần tới ad, nên preload trước thường chỉ tạo request không đổi được impression. Màn chờ
+     * che khoảng nạp; ad có sẵn thì vẫn hiện đủ [RewardAdConfig.minLoadingMs] trước khi bung.
+     */
+    suspend fun loadAndShowRewardAd(
+        config: RewardAdConfig,
+        placement: String? = null,
+        onShow: () -> Unit = {},
+        onReward: (RewardItem) -> Unit = {}
+    ): Boolean
 
     /**
      * Load open ad for foreground resume. Id lấy từ `ads_id_config` (placement `open_all`).

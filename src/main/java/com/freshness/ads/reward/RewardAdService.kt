@@ -2,6 +2,7 @@ package com.freshness.ads.reward
 
 import android.app.Activity
 import android.app.Application
+import com.freshness.ads.loading.DEFAULT_MIN_LOADING_MS
 import com.google.android.libraries.ads.mobile.sdk.rewarded.RewardItem
 import kotlinx.coroutines.flow.StateFlow
 import java.lang.ref.WeakReference
@@ -42,7 +43,10 @@ data class RewardAdConfig(
     // FALLBACK ONLY: Remote Config `settings.rewardTimeoutMs` thắng giá trị này
     // khi > 0, xem `RewardAdProvider.effectiveTimeOut`.
     val timeOut: Long = 20_000L,
-    val isShowLoading: Boolean = true
+    val isShowLoading: Boolean = true,
+    // Thời gian tối thiểu màn chờ phải hiện trước khi quảng cáo bung, kể cả khi ad đã preload sẵn.
+    // Xem `awaitMinLoadingWindow` cho phần chính sách. Đặt 0 để tắt.
+    val minLoadingMs: Long = DEFAULT_MIN_LOADING_MS
 ) {
     fun asRewardAdRequest() = RewardAdRequest(placement = placement)
 }

@@ -21,6 +21,12 @@ data class AdsConfig(
     val openAdPlacement: String = DEFAULT_OPEN_AD_PLACEMENT,
     val splashInterstitialPlacement: String = DEFAULT_SPLASH_INTERSTITIAL_PLACEMENT,
     val nativePools: Map<String, Int> = emptyMap(),
+    /**
+     * SDK tự vẽ màn chờ (spinner che toàn màn) trong lúc nạp/trước khi bung interstitial và
+     * rewarded. Tắt khi app muốn giao diện riêng — lúc đó tự observe `AdsGraph.adLoading.isLoading`
+     * và tự dựng UI, đừng bỏ hẳn: khoảng chờ đó là thứ chính sách AdMob khuyến nghị nên có.
+     */
+    val showDefaultLoadingUi: Boolean = true,
 ) {
     companion object {
         const val DEFAULT_OPEN_AD_PLACEMENT = "open_all"

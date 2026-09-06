@@ -61,9 +61,12 @@ Sau đó `AdsGraph.adsManager` là đầu vào duy nhất:
 ```kotlin
 val ads = AdsGraph.adsManager
 
-// Interstitial
+// Interstitial — preload trước rồi hiện
 ads.loadInterAd(config)
 ads.showInterAd(config, placement = "inter_next")
+
+// …hoặc nạp và hiện trong một lệnh, cho chỗ không preload trước được
+ads.loadAndShowInterAd(config, placement = "inter_next")
 
 // Native
 ads.nativeAdService.preloadIfEmpty(context, key = "native_detail", placement = "native_detail")
@@ -72,9 +75,17 @@ bindNativeAdFromCache(binding.nativeAd, ads.nativeAdService, "native_detail", re
 // Banner — container để wrap_content, xem ghi chú chiều cao ở dưới
 ads.bannerAdService.loadBannerAds(this, binding.bannerContainer, "banner_home", isCollapsible = false)
 
-// Rewarded
-ads.showRewardAd(config, placement = "reward_unlock", onShow = { … }, onReward = { … })
+// Rewarded — thường không preload, bấm rồi mới nạp
+ads.loadAndShowRewardAd(config, placement = "reward_unlock", onReward = { … })
 ```
+
+`onShow` và `onReward` được gọi trên main thread, chạm UI thẳng trong đó được.
+
+## Màn chờ
+
+SDK tự vẽ spinner che toàn màn trong lúc nạp và **giữ ít nhất 500ms trước khi quảng cáo toàn màn bung ra**, kể cả khi ad đã preload sẵn. Khoảng chờ đó là thứ [chính sách AdMob khuyến nghị](https://support.google.com/admob/answer/6201350) — nó cho ngón tay đang bấm kịp dừng lại, thay vì cú chạm rơi thẳng vào quảng cáo vừa xuất hiện.
+
+Chỉnh bằng `minLoadingMs` trong `InterAdConfig` / `RewardAdConfig` (0 là tắt). Muốn giao diện riêng thì `AdsConfig(showDefaultLoadingUi = false)` rồi tự observe `AdsGraph.adLoading.isLoading` — đừng bỏ hẳn khoảng chờ.
 
 ## Cấu hình
 

@@ -2,6 +2,7 @@ package com.freshness.ads.inter
 
 import android.app.Activity
 import android.app.Application
+import com.freshness.ads.loading.DEFAULT_MIN_LOADING_MS
 import kotlinx.coroutines.flow.StateFlow
 import java.lang.ref.WeakReference
 
@@ -35,7 +36,11 @@ data class InterAdConfig(
     val reload: Boolean,
     val retryCount: Int = 2,
     val timeOut: Long = 6_000L,
-    val isShowLoading: Boolean = true
+    val isShowLoading: Boolean = true,
+    // Thời gian tối thiểu màn chờ phải hiện trước khi quảng cáo bung, kể cả khi ad đã preload sẵn.
+    // Không có nó thì ad đã cache sẽ bung ngay trong cùng nhịp với cú chạm vừa rồi. Xem
+    // `awaitMinLoadingWindow` cho phần chính sách. Đặt 0 để tắt.
+    val minLoadingMs: Long = DEFAULT_MIN_LOADING_MS
 ) {
     fun asInterAdRequest() = InterAdRequest(
         placement = placement,

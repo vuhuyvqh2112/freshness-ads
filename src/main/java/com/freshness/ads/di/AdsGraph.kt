@@ -14,6 +14,7 @@ import com.freshness.ads.inter.InterAdProvider
 import com.freshness.ads.inter.InterAdService
 import com.freshness.ads.loading.AdLoading
 import com.freshness.ads.loading.AdLoadingImpl
+import com.freshness.ads.loading.AdLoadingOverlay
 import com.freshness.ads.manager.AdsInitializer
 import com.freshness.ads.manager.AdsManagerProvider
 import com.freshness.ads.manager.AdsManagerService
@@ -67,7 +68,11 @@ object AdsGraph {
         dataStoreOverride ?: RemoteFlagAdsDataStore(remoteConfigService)
     }
 
-    private val adLoading: AdLoading by lazy { AdLoadingImpl() }
+    /**
+     * Trạng thái màn chờ của interstitial/rewarded. SDK tự vẽ spinner mặc định; app chỉ cần chạm
+     * tới đây khi tắt [AdsConfig.showDefaultLoadingUi] để dựng giao diện riêng.
+     */
+    val adLoading: AdLoading by lazy { AdLoadingImpl() }
 
     val consentService: ConsentService by lazy { ConsentProvider(context) }
 
@@ -139,6 +144,12 @@ object AdsGraph {
             adsManagerService = adsManager,
             remoteConfigService = remoteConfigService,
         ).init(application)
+
+        // Sau init: overlay chỉ bám vòng đời activity và observe adLoading, không phụ thuộc thứ tự
+        // khởi tạo của các ad service.
+        if (config.showDefaultLoadingUi) {
+            AdLoadingOverlay(adLoading).install(application)
+        }
     }
 }
 

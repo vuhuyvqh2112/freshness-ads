@@ -3,12 +3,14 @@ package com.freshness.ads.reward
 import android.app.Activity
 import android.app.Application
 import android.content.Context
+import android.os.SystemClock
 import com.freshness.ads.config.AdBudgets
 import com.freshness.ads.config.AdUnitCatalog
 import com.freshness.ads.consent.AdInitGate
 import com.freshness.ads.datastore.AdsDataStore
 import com.freshness.ads.extensions.safeResume
 import com.freshness.ads.loading.AdLoading
+import com.freshness.ads.loading.awaitMinLoadingWindow
 import com.google.android.libraries.ads.mobile.sdk.common.AdLoadCallback
 import com.google.android.libraries.ads.mobile.sdk.common.AdRequest
 import com.google.android.libraries.ads.mobile.sdk.common.FullScreenContentError
@@ -190,6 +192,7 @@ class RewardAdProvider constructor(
             showInProgress = true
 
             scope.launch {
+                val loadingStartedAt = SystemClock.elapsedRealtime()
                 if (config.isShowLoading) {
                     adLoading.setLoading(true)
                 }
@@ -245,8 +248,16 @@ class RewardAdProvider constructor(
 
                     override fun onAdShowedFullScreenContent() {
                         _isShowing.value = true
-                        onShow.invoke()
+                        // Cùng lý do với onReward: đo được callback này chạy trên GMA(BG), mà
+                        // onShow là chỗ app ẩn loading của mình / dừng nhạc nền — toàn việc chạm UI.
+                        scope.launch { onShow.invoke() }
                     }
+                }
+
+                // Ad đã sẵn sàng. Giữ màn chờ cho đủ khoảng tối thiểu trước khi bung: ad preload sẵn
+                // thì tới đây mới trôi vài mili giây kể từ cú chạm của người dùng.
+                if (config.isShowLoading) {
+                    awaitMinLoadingWindow(loadingStartedAt, config.minLoadingMs)
                 }
 
                 activity.get()?.let {
@@ -254,7 +265,11 @@ class RewardAdProvider constructor(
                         it
                     ) { rewardItem ->
                         Timber.d("User earned the reward: ${rewardItem.amount} ${rewardItem.type}")
-                        onReward.invoke(rewardItem)
+                        // GMA next-gen bắn callback này trên luồng nền của nó (thấy rõ trong crash:
+                        // "FATAL EXCEPTION: GMA(BG) 5"). Mà onReward chính là chỗ app cộng thưởng —
+                        // gần như luôn chạm UI hoặc storage. Đưa về main trước khi giao cho app,
+                        // đừng bắt mọi call site tự nhớ.
+                        scope.launch { onReward.invoke(rewardItem) }
                     }
                 } ?: run {
                     Timber.e("Hito::showAd activity = null")

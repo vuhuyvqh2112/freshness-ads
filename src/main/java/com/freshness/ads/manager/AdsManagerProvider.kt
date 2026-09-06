@@ -148,9 +148,30 @@ class AdsManagerProvider constructor(
         return shown
     }
 
+    override suspend fun loadAndShowInterAd(
+        config: InterAdConfig,
+        placement: String?,
+        onShow: () -> Unit
+    ): Boolean {
+        // loadAd tự bỏ qua khi đã có ad trong cache hoặc job đang chạy, nên gọi thẳng là đủ —
+        // không cần kiểm tra trạng thái ở đây rồi lệch với logic bên trong provider.
+        loadInterAd(config)
+        return showInterAd(config, placement, onShow)
+    }
+
     override fun loadRewardAd(config: RewardAdConfig) {
         if (!consentService.canRequestAds) return
         rewardAdService.loadAd(config)
+    }
+
+    override suspend fun loadAndShowRewardAd(
+        config: RewardAdConfig,
+        placement: String?,
+        onShow: () -> Unit,
+        onReward: (RewardItem) -> Unit
+    ): Boolean {
+        loadRewardAd(config)
+        return showRewardAd(config, placement, onShow, onReward)
     }
 
     override suspend fun showRewardAd(

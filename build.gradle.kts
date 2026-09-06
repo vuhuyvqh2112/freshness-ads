@@ -7,7 +7,7 @@ plugins {
 // com.github.<user> and the artifact id the repository name. Publishing under any
 // other coordinate builds fine locally and then 404s on JitPack.
 group = "com.github.vuhuyvqh2112"
-version = "1.0.2"
+version = "1.0.3"
 
 android {
     namespace = "com.freshness.ads"

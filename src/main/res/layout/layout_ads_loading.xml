@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Màn chờ mặc định của SDK, hiện trước khi bung quảng cáo toàn màn.
+
+  Chỉ có spinner, không chữ: SDK không biết app đang dùng ngôn ngữ nào, và thêm string là thêm việc
+  dịch cho mọi app dùng nó. App muốn giao diện riêng thì tắt cờ showDefaultLoadingUi trong AdsConfig
+  rồi tự observe AdsGraph.adLoading.isLoading.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ProgressBar
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:indeterminate="true" />
+</FrameLayout>

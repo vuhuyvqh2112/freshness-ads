@@ -3,12 +3,14 @@ package com.freshness.ads.inter
 import android.app.Activity
 import android.app.Application
 import android.content.Context
+import android.os.SystemClock
 import com.freshness.ads.config.AdBudgets
 import com.freshness.ads.config.AdUnitCatalog
 import com.freshness.ads.consent.AdInitGate
 import com.freshness.ads.datastore.AdsDataStore
 import com.freshness.ads.extensions.safeResume
 import com.freshness.ads.loading.AdLoading
+import com.freshness.ads.loading.awaitMinLoadingWindow
 import com.google.android.libraries.ads.mobile.sdk.common.AdLoadCallback
 import com.google.android.libraries.ads.mobile.sdk.common.AdRequest
 import com.google.android.libraries.ads.mobile.sdk.common.FullScreenContentError
@@ -173,6 +175,7 @@ class InterAdProvider constructor(
             }
 
             scope.launch {
+                val loadingStartedAt = SystemClock.elapsedRealtime()
                 if (config.isShowLoading) {
                     adLoading.setLoading(true)
                 }
@@ -216,8 +219,16 @@ class InterAdProvider constructor(
 
                     override fun onAdShowedFullScreenContent() {
                         _isShowing.value = true
-                        onShow.invoke()
+                        // GMA next-gen bắn AdEventCallback trên luồng nền của nó (đo được:
+                        // "onShow thread=GMA(BG) 2"). onShow là chỗ app chạm UI, đưa về main.
+                        scope.launch { onShow.invoke() }
                     }
+                }
+
+                // Ad đã sẵn sàng. Giữ màn chờ cho đủ khoảng tối thiểu trước khi bung: ad preload sẵn
+                // thì tới đây mới trôi vài mili giây kể từ cú chạm của người dùng.
+                if (config.isShowLoading) {
+                    awaitMinLoadingWindow(loadingStartedAt, config.minLoadingMs)
                 }
 
                 activity.get()?.let {
