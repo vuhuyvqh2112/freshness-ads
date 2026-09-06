@@ -2,17 +2,23 @@
 <!--
   Màn chờ mặc định của SDK, hiện trước khi bung quảng cáo toàn màn.
 
+  Nền trắng đục che hẳn nội dung phía dưới: người dùng thấy rõ app đang chuyển trạng thái, và không
+  còn gì để bấm nhầm trong lúc chờ.
+
   Chỉ có spinner, không chữ: SDK không biết app đang dùng ngôn ngữ nào, và thêm string là thêm việc
   dịch cho mọi app dùng nó. App muốn giao diện riêng thì tắt cờ showDefaultLoadingUi trong AdsConfig
   rồi tự observe AdsGraph.adLoading.isLoading.
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="@color/ads_loading_background">
 
     <ProgressBar
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
-        android:indeterminate="true" />
+        android:indeterminate="true"
+        android:indeterminateTint="@color/ads_loading_spinner"
+        android:indeterminateTintMode="src_in" />
 </FrameLayout>

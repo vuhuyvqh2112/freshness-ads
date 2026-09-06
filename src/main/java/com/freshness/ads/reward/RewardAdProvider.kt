@@ -248,6 +248,10 @@ class RewardAdProvider constructor(
 
                     override fun onAdShowedFullScreenContent() {
                         _isShowing.value = true
+                        // Quảng cáo đã chiếm màn hình: việc của màn chờ kết thúc TẠI ĐÂY, không
+                        // phải lúc ad đóng. Tắt muộn hơn thì cờ loading còn true suốt lúc xem
+                        // quảng cáo, và spinner hiện lại ngay khi activity app resume lúc đóng ad.
+                        adLoading.setLoading(false)
                         // Cùng lý do với onReward: đo được callback này chạy trên GMA(BG), mà
                         // onShow là chỗ app ẩn loading của mình / dừng nhạc nền — toàn việc chạm UI.
                         scope.launch { onShow.invoke() }

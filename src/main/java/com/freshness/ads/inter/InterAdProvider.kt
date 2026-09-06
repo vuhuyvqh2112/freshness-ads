@@ -219,6 +219,10 @@ class InterAdProvider constructor(
 
                     override fun onAdShowedFullScreenContent() {
                         _isShowing.value = true
+                        // Quảng cáo đã chiếm màn hình: việc của màn chờ kết thúc TẠI ĐÂY, không
+                        // phải lúc ad đóng. Tắt muộn hơn thì cờ loading còn true suốt lúc xem
+                        // quảng cáo, và spinner hiện lại ngay khi activity app resume lúc đóng ad.
+                        adLoading.setLoading(false)
                         // GMA next-gen bắn AdEventCallback trên luồng nền của nó (đo được:
                         // "onShow thread=GMA(BG) 2"). onShow là chỗ app chạm UI, đưa về main.
                         scope.launch { onShow.invoke() }

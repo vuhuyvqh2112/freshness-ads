@@ -78,15 +78,13 @@ internal class AdLoadingOverlay(private val adLoading: AdLoading) {
                 setCancelable(false)
                 setCanceledOnTouchOutside(false)
                 window?.apply {
+                    // Nền của layout đã đục và phủ kín, không cần dim thêm — chồng hai lớp chỉ làm
+                    // màu trắng bị xám đi.
                     setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
                     setLayout(
                         WindowManager.LayoutParams.MATCH_PARENT,
                         WindowManager.LayoutParams.MATCH_PARENT,
                     )
-                    // Chặn mọi thao tác chạm phía dưới trong khoảng chờ: đó chính là mục đích của
-                    // màn này — cho ngón tay dừng lại trước khi quảng cáo chiếm màn hình.
-                    addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-                    setDimAmount(DIM_AMOUNT)
                 }
                 show()
             }
@@ -98,9 +96,5 @@ internal class AdLoadingOverlay(private val adLoading: AdLoading) {
         val current = dialog ?: return
         dialog = null
         runCatching { current.dismiss() }
-    }
-
-    private companion object {
-        const val DIM_AMOUNT = 0.6f
     }
 }
