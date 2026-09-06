@@ -6,7 +6,7 @@ plugins {
 // JitPack resolves com.github.<user>:<repo>:<tag>, so the group has to be exactly
 // com.github.<user> and the artifact id the repository name. Publishing under any
 // other coordinate builds fine locally and then 404s on JitPack.
-group = "com.github.huyvqit"
+group = "com.github.vuhuyvqh2112"
 version = "1.0.0"
 
 android {

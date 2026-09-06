@@ -25,7 +25,7 @@ dependencyResolutionManagement {
 `app/build.gradle.kts`:
 
 ```kotlin
-implementation("com.github.huyvqit:freshness-ads:1.0.0")
+implementation("com.github.vuhuyvqh2112:freshness-ads:1.0.0")
 ```
 
 Không cần khai thêm GMA SDK, UMP, Unity adapter hay Firebase Config — POM đã mang theo hết.
