@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- Shimmer loading placeholder -->
+    <com.facebook.shimmer.ShimmerFrameLayout
+        android:id="@+id/shimmerLayout"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <!-- Nền shimmer chiếm toàn bộ -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@color/home_shimmer_color" />
+
+            <!-- Ad badge giả -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_margin="@dimen/size6"
+                android:background="@drawable/shape_ad_view"
+                android:backgroundTint="@color/home_shimmer_color"
+                android:paddingHorizontal="@dimen/size5"
+                android:paddingVertical="@dimen/size1"
+                android:text="Ad"
+                android:textColor="@color/gnt_white"
+                android:textSize="@dimen/size9"
+                android:textStyle="bold" />
+
+            <!-- Bottom bar giả -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/size50"
+                android:layout_gravity="bottom"
+                android:background="#30000000" />
+
+        </FrameLayout>
+
+    </com.facebook.shimmer.ShimmerFrameLayout>
+
+    <!-- Real native ad view -->
+    <com.freshness.ads.natives.NativeAdHomeView
+        android:id="@+id/nativeTemplate"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

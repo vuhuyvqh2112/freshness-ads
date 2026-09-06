@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+
+    <com.facebook.shimmer.ShimmerFrameLayout
+        android:id="@+id/shimmerLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="visible"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/background"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/cta"
+                android:layout_width="@dimen/size150"
+                android:layout_height="@dimen/size40"
+                android:layout_marginHorizontal="@dimen/size10"
+                android:layout_marginTop="@dimen/size5"
+                android:background="@color/home_shimmer_color"
+                android:gravity="center"
+                android:lines="1"
+                android:textColor="@color/gnt_white"
+                android:textSize="@dimen/size14"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintHeight_min="@dimen/size40"
+                app:layout_constraintTop_toBottomOf="@+id/media_view" />
+
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:id="@+id/middle"
+                android:layout_width="0dp"
+                android:layout_height="@dimen/size50"
+                android:layout_marginHorizontal="@dimen/size10"
+                android:layout_marginTop="@dimen/size15"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent">
+
+                <View
+                    android:id="@+id/icon"
+                    android:layout_width="55dp"
+                    android:layout_height="55dp"
+                    android:background="@color/home_shimmer_color"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent"
+                    tools:src="@tools:sample/avatars" />
+
+                <View
+                    android:id="@+id/primary"
+                    android:layout_width="0dp"
+                    android:layout_height="@dimen/size15"
+                    android:layout_marginStart="@dimen/size10"
+                    android:layout_marginTop="@dimen/size5"
+                    android:background="@color/home_shimmer_color"
+                    android:textColor="@color/gnt_gray"
+                    android:textSize="@dimen/size15"
+                    android:textStyle="bold"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toEndOf="@+id/icon"
+                    app:layout_constraintTop_toTopOf="parent" />
+
+                <View
+                    android:id="@+id/secondary"
+                    android:layout_width="0dp"
+                    android:layout_height="@dimen/size15"
+                    android:layout_marginStart="@dimen/size10"
+                    android:background="@color/home_shimmer_color"
+                    android:visibility="visible"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toEndOf="@id/icon"
+                    app:layout_constraintTop_toBottomOf="@+id/primary" />
+
+            </androidx.constraintlayout.widget.ConstraintLayout>
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/shape_ad_view"
+                android:backgroundTint="@color/home_shimmer_color"
+                android:paddingHorizontal="@dimen/size5"
+                android:text="Ad"
+                android:textColor="@color/gnt_white"
+                android:textSize="12dp"
+                android:textStyle="bold"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <View
+                android:id="@+id/media_view"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/size128"
+                android:layout_marginHorizontal="@dimen/size10"
+                android:layout_marginTop="@dimen/size5"
+                android:background="@color/home_shimmer_color"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/middle" />
+
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+    </com.facebook.shimmer.ShimmerFrameLayout>
+
+    <com.freshness.ads.natives.NativeAdView3
+        android:id="@+id/nativeTemplate"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

@@ -1,0 +1,55 @@
+[versions]
+agp = "9.3.1"
+coreKtx = "1.19.0"
+appcompat = "1.7.1"
+material = "1.14.0"
+constraintlayout = "2.2.1"
+fragment = "1.8.9"
+lifecycle = "2.8.7"
+junit = "4.13.2"
+
+coroutines = "1.10.2"
+adsMobileSdk = "1.2.1"
+userMessagingPlatform = "3.2.0"
+gson = "2.11.0"
+timber = "5.0.1"
+shimmer = "0.5.0"
+firebaseBom = "34.17.0"
+
+# Ba số đầu của adapter khớp version SDK Unity mà nó bọc, nên hai dòng này phải đi cùng nhau:
+# adapter 4.18.0.x bọc unity-ads 4.18.0. Lệch cặp là adapter gọi vào API không tồn tại.
+#
+# GHIM Ở 4.18, KHÔNG nâng lên bản mới nhất chỉ vì nó mới hơn: đây đúng là cặp đang chạy production
+# cùng ads-mobile-sdk 1.2.1. Adapter mediation phải khớp với SDK GMA next-gen, mà chuyện đó chỉ
+# kiểm được bằng một app đang sống.
+unityAdapter = "4.18.0.0"
+unityAds = "4.18.0"
+
+[libraries]
+androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+material = { group = "com.google.android.material", name = "material", version.ref = "material" }
+androidx-constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
+androidx-fragment-ktx = { group = "androidx.fragment", name = "fragment-ktx", version.ref = "fragment" }
+androidx-lifecycle-process = { group = "androidx.lifecycle", name = "lifecycle-process", version.ref = "lifecycle" }
+androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle" }
+kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+
+ads-mobile-sdk = { group = "com.google.android.libraries.ads.mobile.sdk", name = "ads-mobile-sdk", version.ref = "adsMobileSdk" }
+user-messaging-platform = { group = "com.google.android.ump", name = "user-messaging-platform", version.ref = "userMessagingPlatform" }
+gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
+timber = { group = "com.jakewharton.timber", name = "timber", version.ref = "timber" }
+shimmer = { group = "com.facebook.shimmer", name = "shimmer", version.ref = "shimmer" }
+
+# The BoM pins every Firebase artifact, so the modules below carry no version.
+firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
+firebase-config = { group = "com.google.firebase", name = "firebase-config" }
+firebase-crashlytics = { group = "com.google.firebase", name = "firebase-crashlytics" }
+
+mediation-unity = { group = "com.google.ads.mediation", name = "unity", version.ref = "unityAdapter" }
+unity-ads = { group = "com.unity3d.ads", name = "unity-ads", version.ref = "unityAds" }
+
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+
+[plugins]
+android-library = { id = "com.android.library", version.ref = "agp" }

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Badge "Ad" bo đều 4 góc, dùng khi badge đứng cạnh icon thay vì dán vào góc media. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@color/text_color_cta" />
+    <corners android:radius="@dimen/size4" />
+</shape>

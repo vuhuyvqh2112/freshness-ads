@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.libraries.ads.mobile.sdk.nativead.NativeAdView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/native_ad_view"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/gnt_outline_shape">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/background"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/middle"
+            android:layout_width="0dp"
+            android:layout_height="@dimen/size50"
+            android:layout_marginHorizontal="@dimen/size10"
+            android:layout_marginTop="@dimen/size2"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/appCompatTextView">
+
+            <ImageView
+                android:id="@+id/icon"
+                android:layout_width="55dp"
+                android:layout_height="55dp"
+                android:scaleType="fitCenter"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                tools:src="@tools:sample/avatars" />
+
+            <TextView
+                android:id="@+id/primary"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/size8"
+                android:ellipsize="end"
+                android:lines="1"
+                android:textColor="@color/text_color_cta_2"
+                android:textSize="@dimen/size16"
+                android:textStyle="bold"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toEndOf="@+id/icon"
+                app:layout_constraintTop_toTopOf="parent"
+                tools:text="Nhận học bổng du học Mỹ" />
+
+            <TextView
+                android:id="@+id/body"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/size8"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textColor="@color/gnt_gray"
+                android:textSize="@dimen/size11"
+                android:visibility="visible"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toEndOf="@id/icon"
+                app:layout_constraintTop_toBottomOf="@+id/primary"
+                tools:text="@tools:sample/lorem/random" />
+
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/appCompatTextView"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/shape_ad_view"
+            android:paddingHorizontal="@dimen/size5"
+            android:text="Ad"
+            android:textColor="@color/gnt_white"
+            android:textSize="@dimen/size10"
+            android:textStyle="bold"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <com.google.android.libraries.ads.mobile.sdk.nativead.MediaView
+            android:id="@+id/media_view"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/size128"
+            android:layout_marginTop="@dimen/size5"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/middle" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/cta"
+            android:layout_width="@dimen/size150"
+            android:layout_height="@dimen/size40"
+            android:layout_marginHorizontal="@dimen/size10"
+            android:layout_marginTop="@dimen/size5"
+            android:layout_marginBottom="@dimen/size10"
+            android:background="@drawable/shape_cta_native_admob"
+            android:gravity="center"
+            android:lines="1"
+            android:textStyle="bold"
+            android:textColor="@color/gnt_white"
+            android:textSize="@dimen/size14"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHeight_min="@dimen/size40"
+            app:layout_constraintTop_toBottomOf="@+id/media_view" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</com.google.android.libraries.ads.mobile.sdk.nativead.NativeAdView>

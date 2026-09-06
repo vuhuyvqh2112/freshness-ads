@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="home_shimmer_color">#C3C3C3</color>
+    <color name="purple_200">#FFBB86FC</color>
+    <color name="purple_500">#FF6200EE</color>
+    <color name="purple_700">#FF3700B3</color>
+    <color name="teal_200">#FF03DAC5</color>
+    <color name="teal_700">#FF018786</color>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="gnt_test_background_color">#00F4F4F4</color>
+    <color name="gnt_test_background_color_2">#00A3A3A3</color>
+    <color name="gnt_black">#000000</color>
+    <color name="gnt_red">#FF0000</color>
+    <color name="gnt_green">#00FF00</color>
+    <color name="gnt_blue">#4285f4</color>
+    <color name="gnt_outline">#D1D1D1</color>
+    <color name="colorAds">#068abf</color>
+    <color name="colorPrimary">#00FF00</color>
+    <color name="color_1">#00cbff</color>
+    <color name="color_2">#0077ff</color>
+    <color name="color_3">#419aff</color>
+    <color name="color_4">#4b4b4b</color>
+    <color name="color_5">#ff4949</color>
+    <color name="color_6">#ff9900</color>
+    <color name="color_7">#2e2b40</color>
+    <color name="color_8">#25213a</color>
+    <color name="color_9">#dcdcdc</color>
+    <color name="black_63">#A1000000</color>
+    <color name="color_white_86">#DBFFFFFF</color>
+    <color name="white_63">#A1FFFFFF</color>
+    <color name="white_38">#61FFFFFF</color>
+    <color name="black_20">#05000000</color>
+    <color name="white_10">#1AFFFFFF</color>
+    <color name="white_20">#33FFFFFF</color>
+    <color name="white_30">#4DFFFFFF</color>
+    <color name="color_white">#ffffff</color>
+    <color name="color_262338">#262338</color>
+    <color name="color_694E23">#694E23</color>
+
+    <color name="gnt_ad_green">@color/ads_brand</color>
+    <color name="gnt_gray">#6C6C6C</color>
+    <!--
+      Màu chủ đạo của mọi template native: XANH NGỌC ĐẬM — cùng hệ màu với app nhưng tối và trầm hơn
+      hẳn mọi tông app đang dùng (brand_primary #2DCCD3, brand_primary_dark #12A0AD,
+      brand_on_light #06626B), để quảng cáo hoà vào bộ nhận diện mà vẫn không bị nhìn lẫn thành nút
+      thật của app. Đổi ba biến dưới đây là đổi màu cho tất cả template cùng lúc.
+    -->
+    <color name="ads_brand">#0B7C88</color>
+    <color name="ads_brand_deep">#05545C</color>
+    <color name="ads_brand_darkest">#03383E</color>
+
+    <!-- Tiêu đề ad. Phần body vẫn để xám (gnt_gray / text_color_second) cho dễ đọc. -->
+    <color name="text_color_primary">@color/ads_brand_deep</color>
+    <color name="text_color_second">#5F6368</color>
+    <!-- Nền nhãn "Ad" (shape_ad_view*) -->
+    <color name="text_color_cta">@color/ads_brand</color>
+    <!-- Tiêu đề ad ở các template còn lại -->
+    <color name="text_color_cta_2">@color/ads_brand_deep</color>
+    <color name="gnt_white">#FFFFFF</color>
+    <color name="gnt_background">#F8F8F8</color>
+    <color name="gnt_background_63">#A1FAFAFA</color>
+    <color name="gray_232323">#232323</color>
+    <color name="stroke">#0F0F0F</color>
+</resources>

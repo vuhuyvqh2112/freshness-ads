@@ -1,0 +1,64 @@
+{
+  "_comment": [
+    "Chép file này vào app/src/main/assets/ads_id_config.json rồi thay id thật.",
+    "Đây là bản DEFAULT đóng gói trong APK — đỡ cold start khi Remote Config chưa fetch về.",
+    "",
+    "Remote Config (key `ads_id_config`) ghi đè theo TỪNG placement: key nào có trên RC thì RC",
+    "thắng trọn vẹn, key nào thiếu thì rơi về file này. Placement không có ở cả hai chỗ = resolve",
+    "rỗng = tắt.",
+    "",
+    "Thứ tự trong `ids` là thứ tự waterfall: thử id đầu, fail mới xuống id kế. Thêm tầng high-floor",
+    "thì chèn vào ĐẦU mảng. `enable: false` ở cấp id tắt riêng một tầng, ở cấp placement tắt cả chỗ.",
+    "",
+    "Tên placement là do app tự đặt, SDK không ép danh sách nào. Riêng hai key dưới đây SDK tự gọi",
+    "nên phải khớp với AdsConfig: `open_all` (app-open) và `inter_splash` (interstitial splash).",
+    "",
+    "Mọi id dưới đây là AD UNIT TEST CHÍNH THỨC CỦA GOOGLE: request nào cũng fill nhưng KHÔNG ra tiền."
+  ],
+  "enableAllAds": true,
+  "settings": {
+    "splashTimeoutMs": 30000,
+    "interMinIntervalMs": 20000,
+    "rewardTimeoutMs": 20000
+  },
+  "placements": {
+    "inter_splash": {
+      "format": "interstitial",
+      "enable": true,
+      "ids": [
+        { "id": "ca-app-pub-3940256099942544/1033173712", "enable": true }
+      ]
+    },
+    "open_all": {
+      "format": "appOpen",
+      "enable": true,
+      "ids": [
+        { "id": "ca-app-pub-3940256099942544/9257395921", "enable": true }
+      ]
+    },
+    "banner_home": {
+      "format": "banner",
+      "enable": true,
+      "ids": [
+        { "id": "ca-app-pub-3940256099942544/9214589741", "enable": true }
+      ]
+    },
+    "native_home": {
+      "format": "native",
+      "enable": true,
+      "baseMs": 30000,
+      "tierCapMs": 8000,
+      "ceilingMs": 120000,
+      "ids": [
+        { "id": "ca-app-pub-3940256099942544/2247696110", "enable": true }
+      ]
+    },
+    "reward_feature": {
+      "format": "rewarded",
+      "enable": true,
+      "ids": [
+        { "id": "ca-app-pub-3940256099942544/5224354917", "enable": true }
+      ]
+    }
+  }
+}

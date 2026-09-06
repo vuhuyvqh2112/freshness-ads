@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.libraries.ads.mobile.sdk.nativead.NativeAdView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/native_ad_view"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/gnt_outline_shape">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <!-- MediaView full card -->
+        <com.google.android.libraries.ads.mobile.sdk.nativead.MediaView
+            android:id="@+id/media_view"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:scaleType="centerCrop"
+            app:layout_constraintBottom_toTopOf="@+id/overlay_gradient"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <!-- Ad badge -->
+        <TextView
+            android:id="@+id/ad_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_margin="@dimen/size8"
+            android:background="@drawable/shape_ad_view"
+            android:paddingHorizontal="@dimen/size5"
+            android:paddingVertical="@dimen/size1"
+            android:text="Ad"
+            android:textColor="@color/gnt_white"
+            android:textSize="@dimen/size10"
+            android:textStyle="bold"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <!-- Bottom gradient overlay -->
+        <View
+            android:id="@+id/overlay_gradient"
+            android:layout_width="0dp"
+            android:layout_height="@dimen/size80"
+            android:background="@color/white"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent" />
+
+        <!-- Icon -->
+        <ImageView
+            android:id="@+id/icon"
+            android:layout_width="@dimen/size40"
+            android:layout_height="@dimen/size40"
+            android:layout_marginStart="@dimen/size12"
+            android:layout_marginBottom="@dimen/size12"
+            android:scaleType="centerCrop"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent" />
+
+        <!-- Title -->
+        <TextView
+            android:id="@+id/primary"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/size8"
+            android:layout_marginEnd="@dimen/size8"
+            android:ellipsize="end"
+            android:lines="1"
+            android:textColor="@color/text_color_cta_2"
+            android:textSize="@dimen/size14"
+            android:textStyle="bold"
+            app:layout_constraintBottom_toTopOf="@+id/body"
+            app:layout_constraintEnd_toStartOf="@+id/cta"
+            app:layout_constraintStart_toEndOf="@+id/icon" />
+
+        <!-- Body -->
+        <TextView
+            android:id="@+id/body"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/size8"
+            android:layout_marginEnd="@dimen/size8"
+            android:ellipsize="end"
+            android:lines="1"
+            android:textColor="@color/gnt_gray"
+            android:textSize="@dimen/size11"
+            app:layout_constraintBottom_toBottomOf="@+id/icon"
+            app:layout_constraintEnd_toStartOf="@+id/cta"
+            app:layout_constraintStart_toEndOf="@+id/icon" />
+
+        <!-- CTA button -->
+        <TextView
+            android:id="@+id/cta"
+            android:layout_width="wrap_content"
+            android:layout_height="@dimen/size34"
+            android:layout_marginEnd="@dimen/size12"
+            android:layout_marginBottom="@dimen/size12"
+            android:background="@drawable/shape_cta_native_admob"
+            android:gravity="center"
+            android:lines="1"
+            android:minWidth="@dimen/size80"
+            android:paddingHorizontal="@dimen/size12"
+            android:textColor="@color/gnt_white"
+            android:textSize="@dimen/size12"
+            android:textStyle="bold"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+</com.google.android.libraries.ads.mobile.sdk.nativead.NativeAdView>

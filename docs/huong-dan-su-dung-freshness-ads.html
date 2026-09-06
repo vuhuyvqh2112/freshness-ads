@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Freshness Ads — Hướng dẫn sử dụng</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 16mm 16mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+    font-size: 10.5pt; line-height: 1.55; color: #1b1f24; margin: 0;
+  }
+  h1 { font-size: 25pt; margin: 0 0 4pt; letter-spacing: -0.4pt; }
+  h2 {
+    font-size: 15pt; margin: 22pt 0 8pt; padding-bottom: 4pt;
+    border-bottom: 2px solid #0b7285; color: #0b7285;
+    page-break-after: avoid;
+  }
+  h3 { font-size: 11.5pt; margin: 14pt 0 5pt; color: #14343d; page-break-after: avoid; }
+  p, li { margin: 4pt 0; }
+  ul, ol { margin: 5pt 0 5pt 16pt; padding: 0; }
+  code {
+    font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 9pt;
+    background: #eef2f4; padding: 1px 4px; border-radius: 3px;
+  }
+  pre {
+    font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 8.4pt;
+    line-height: 1.45; background: #f6f8fa; border: 1px solid #dde3e8;
+    border-left: 3px solid #0b7285; border-radius: 4px;
+    padding: 8pt 10pt; overflow-x: auto; white-space: pre-wrap;
+    word-break: break-word; page-break-inside: avoid; margin: 6pt 0;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  table {
+    width: 100%; border-collapse: collapse; margin: 7pt 0; font-size: 9pt;
+    page-break-inside: avoid;
+  }
+  th, td { border: 1px solid #d5dce2; padding: 4pt 6pt; text-align: left; vertical-align: top; }
+  th { background: #eef4f6; font-weight: 600; }
+  .lead { font-size: 11pt; color: #45525c; margin: 0 0 4pt; }
+  .meta { font-size: 8.5pt; color: #6b7780; margin-bottom: 16pt; }
+  .box {
+    border-radius: 4px; padding: 7pt 10pt; margin: 8pt 0; font-size: 9.5pt;
+    page-break-inside: avoid;
+  }
+  .warn { background: #fff4e6; border-left: 3px solid #e8590c; }
+  .danger { background: #fff0f0; border-left: 3px solid #c92a2a; }
+  .note { background: #e7f5f8; border-left: 3px solid #0b7285; }
+  .box strong { display: block; margin-bottom: 2pt; }
+  .toc { background: #f6f8fa; border: 1px solid #dde3e8; border-radius: 4px; padding: 8pt 12pt; }
+  .toc ol { margin: 0 0 0 14pt; font-size: 9.5pt; }
+  .page-break { page-break-before: always; }
+  hr { border: none; border-top: 1px solid #dde3e8; margin: 18pt 0 0; }
+  .footer { font-size: 8.5pt; color: #6b7780; margin-top: 6pt; }
+</style>
+</head>
+<body>
+
+<h1>Freshness Ads</h1>
+<p class="lead">SDK quảng cáo AdMob cho Android — waterfall theo tier, native pool, consent UMP, cấu hình bằng Remote Config.</p>
+<p class="meta">Phiên bản 1.0.0 · Google Mobile Ads Next-Gen SDK 1.2.1 · minSdk 26 · Hướng dẫn sử dụng</p>
+
+<div class="toc">
+<strong>Nội dung</strong>
+<ol>
+  <li>SDK này giải quyết chuyện gì</li>
+  <li>Cài đặt</li>
+  <li>File cấu hình <code>ads_id_config.json</code></li>
+  <li>Khởi tạo trong Application</li>
+  <li>Consent (UMP) và luồng splash</li>
+  <li>Interstitial</li>
+  <li>Native — một slot</li>
+  <li>Native — pool cho danh sách</li>
+  <li>Native full màn</li>
+  <li>Banner</li>
+  <li>Rewarded</li>
+  <li>App-open</li>
+  <li>Remote Config</li>
+  <li>ProGuard / R8</li>
+  <li>Mediation Unity Ads</li>
+  <li>Test và debug</li>
+  <li>Những lỗi làm tụt show rate</li>
+</ol>
+</div>
+
+<h2>1. SDK này giải quyết chuyện gì</h2>
+
+<p>Gọi thẳng Google Mobile Ads SDK thì mỗi màn hình phải tự lo: load, cache, huỷ ad đúng lúc, chờ consent xong mới request, xử lý no-fill, đổi ad unit id khi cần. Làm lại từng đó ở mỗi app là chỗ sinh bug và sinh lãng phí request.</p>
+
+<p>SDK này gom lại thành bốn thứ:</p>
+
+<table>
+<tr><th>Thứ</th><th>Nghĩa là gì</th></tr>
+<tr><td><strong>Catalog</strong></td><td>Ad unit id không nằm trong code. Chúng nằm trong <code>assets/ads_id_config.json</code>, và Remote Config ghi đè được từng placement — đổi id, tắt một chỗ đặt ad, siết thời gian chờ, tất cả không cần release.</td></tr>
+<tr><td><strong>Waterfall</strong></td><td>Mỗi placement khai được nhiều id xếp theo thứ tự. Id đầu không fill thì tự xuống id kế. Dùng để đặt tầng high-floor phía trên.</td></tr>
+<tr><td><strong>Ngân sách thời gian</strong></td><td>Mỗi format có deadline riêng, và deadline đó chia cho từng tier. Hết ngân sách thì dừng, không để user ngồi chờ một request không bao giờ về.</td></tr>
+<tr><td><strong>Vòng đời</strong></td><td>Ad được cache, được huỷ đúng lúc view chết, và fill về muộn vẫn được giữ cho lần load sau thay vì vứt đi.</td></tr>
+</table>
+
+<p>Một đầu vào duy nhất: <code>AdsGraph.adsManager</code>. Không có Hilt/Dagger, không cần kapt/KSP.</p>
+
+<h2>2. Cài đặt</h2>
+
+<h3>2.1 Thêm repository và dependency</h3>
+
+<p>Trong <code>settings.gradle.kts</code>:</p>
+<pre><code>dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url = uri("https://jitpack.io") }
+    }
+}</code></pre>
+
+<p>Trong <code>app/build.gradle.kts</code>:</p>
+<pre><code>dependencies {
+    implementation("com.github.huyvqit:freshness-ads:1.0.0")
+}</code></pre>
+
+<p>Không cần khai thêm GMA SDK, UMP, Unity adapter hay Firebase Config — POM của SDK đã mang theo hết.</p>
+
+<h3>2.2 Firebase</h3>
+
+<p>SDK đọc Remote Config và ghi non-fatal vào Crashlytics, nên app <strong>bắt buộc</strong> phải có Firebase:</p>
+
+<pre><code>// build.gradle.kts (root)
+plugins {
+    id("com.google.gms.google-services") version "4.5.0" apply false
+    id("com.google.firebase.crashlytics") version "3.0.7" apply false
+}
+
+// app/build.gradle.kts
+plugins {
+    id("com.google.gms.google-services")
+    id("com.google.firebase.crashlytics")
+}</code></pre>
+
+<p>Đặt <code>google-services.json</code> vào thư mục <code>app/</code>.</p>
+
+<h3>2.3 AdMob app id trong manifest</h3>
+
+<pre><code>&lt;application&gt;
+    &lt;meta-data
+        android:name="com.google.android.gms.ads.APPLICATION_ID"
+        android:value="ca-app-pub-XXXXXXXXXXXXXXXX~YYYYYYYYYY" /&gt;
+&lt;/application&gt;</code></pre>
+
+<div class="danger">
+<strong>Đây là APP ID, không phải ad unit id.</strong>
+App id có dấu <code>~</code>, ad unit id có dấu <code>/</code>. Điền nhầm là app crash ngay lúc khởi động, không phải "không có ad".
+</div>
+
+<p>Quyền <code>INTERNET</code>, <code>AD_ID</code> và install-referrer đã nằm trong manifest của SDK, không phải khai lại.</p>
+
+<div class="page-break"></div>
+
+<h2>3. File cấu hình <code>ads_id_config.json</code></h2>
+
+<p>Chép <code>samples/ads_id_config.json</code> vào <code>app/src/main/assets/ads_id_config.json</code>. Đây là bản mặc định đóng gói trong APK, dùng khi Remote Config chưa fetch về kịp (lần mở app đầu tiên, hoặc mất mạng).</p>
+
+<pre><code>{
+  "enableAllAds": true,
+  "settings": {
+    "splashTimeoutMs": 30000,
+    "interMinIntervalMs": 20000,
+    "rewardTimeoutMs": 20000
+  },
+  "placements": {
+    "inter_splash": {
+      "format": "interstitial",
+      "enable": true,
+      "ids": [
+        { "id": "ca-app-pub-xxx/high-floor", "enable": true },
+        { "id": "ca-app-pub-xxx/all-price",  "enable": true }
+      ]
+    },
+    "native_home": {
+      "format": "native",
+      "enable": true,
+      "baseMs": 30000,
+      "tierCapMs": 8000,
+      "ceilingMs": 120000,
+      "ids": [
+        { "id": "ca-app-pub-xxx/native-home", "enable": true }
+      ]
+    }
+  }
+}</code></pre>
+
+<table>
+<tr><th>Trường</th><th>Ý nghĩa</th></tr>
+<tr><td><code>enableAllAds</code></td><td>Công tắc tổng. <code>false</code> là tắt sạch mọi format.</td></tr>
+<tr><td><code>placements.&lt;key&gt;</code></td><td>Tên chỗ đặt ad. <strong>Do bạn tự đặt</strong> — SDK không ép danh sách nào.</td></tr>
+<tr><td><code>format</code></td><td><code>banner</code> · <code>native</code> · <code>interstitial</code> · <code>rewarded</code> · <code>appOpen</code>. Quyết định test id dùng ở debug build.</td></tr>
+<tr><td><code>enable</code> (placement)</td><td><code>false</code> = tắt cả chỗ đặt ad này.</td></tr>
+<tr><td><code>ids</code></td><td>Thứ tự waterfall. Id đầu thử trước; fail mới xuống id kế. Tầng high-floor chèn vào <strong>đầu</strong> mảng.</td></tr>
+<tr><td><code>enable</code> (id)</td><td><code>false</code> = tắt riêng một tầng, giữ nguyên các tầng khác.</td></tr>
+<tr><td><code>baseMs</code> / <code>tierCapMs</code> / <code>ceilingMs</code></td><td>Ghi đè ngân sách thời gian mặc định của format. Bỏ trống là dùng mặc định.</td></tr>
+</table>
+
+<div class="note">
+<strong>Placement không tồn tại = tắt.</strong>
+Key không có ở cả Remote Config lẫn file assets sẽ resolve ra rỗng, và mọi lệnh load cho nó im lặng bỏ qua. Không crash, nhưng cũng không có ad — gõ sai tên placement là lỗi khó thấy nhất khi tích hợp.
+</div>
+
+<h3>Hai placement SDK tự gọi</h3>
+
+<p>Hầu hết placement được truyền vào từ call site. Riêng hai cái này SDK tự gọi nên phải khai tên trong <code>AdsConfig</code> (mặc định <code>open_all</code> và <code>inter_splash</code>):</p>
+
+<table>
+<tr><th>Placement</th><th>Vì sao SDK phải biết sẵn</th></tr>
+<tr><td><code>open_all</code></td><td>App-open ad load ngầm theo vòng đời process — không có màn hình nào truyền key vào.</td></tr>
+<tr><td><code>inter_splash</code></td><td>Interstitial của splash có ngân sách thời gian riêng (không giãn theo số tier), nên SDK phải nhận ra nó giữa các interstitial khác.</td></tr>
+</table>
+
+<div class="page-break"></div>
+
+<h2>4. Khởi tạo trong Application</h2>
+
+<pre><code>class MyApp : Application() {
+
+    override fun onCreate() {
+        super.onCreate()
+
+        AdsGraph.install(
+            application = this,
+            config = AdsConfig(
+                openAdPlacement = "open_all",
+                splashInterstitialPlacement = "inter_splash",
+                // key placement -> số ad giữ sẵn trong pool
+                nativePools = mapOf("native_home" to 1),
+            ),
+        )
+
+        // App-open ad phải được che bằng một Activity đục trước khi hiện
+        // (yêu cầu policy của AdMob: user không được thấy nội dung app sau lưng ad).
+        AdsGraph.adsManager.setOnShowOpenAdListener {
+            AdsGraph.adsManager.topActivity.get()?.let { OpenAdActivity.start(it) }
+        }
+    }
+}</code></pre>
+
+<p><code>install</code> gọi một lần; lần thứ hai là no-op. Sau đó dùng <code>AdsGraph.adsManager</code> ở mọi nơi.</p>
+
+<h3>Nối với IAP</h3>
+
+<p>Mặc định chỉ <code>enableAllAds</code> quyết định bật/tắt. App có mua-gói-bỏ-quảng-cáo thì truyền <code>AdsDataStore</code> riêng:</p>
+
+<pre><code>AdsGraph.install(
+    application = this,
+    config = AdsConfig(/* ... */),
+    dataStore = object : AdsDataStore {
+        override var isPurchased: Boolean = billing.hasRemoveAds
+        override val isAdEnabled: Boolean
+            get() = !isPurchased &amp;&amp; remoteFlags.adsOn
+    },
+)</code></pre>
+
+<h2>5. Consent (UMP) và luồng splash</h2>
+
+<p><code>launchSplashAdFlow</code> làm trọn gói: gom consent (có timeout), rồi hiện interstitial splash nếu placement đó đang bật.</p>
+
+<pre><code>class SplashActivity : AppCompatActivity() {
+
+    private val ads get() = AdsGraph.adsManager
+
+    private val splashInterConfig = InterAdConfig(
+        placement = "inter_splash",
+        reload = false,
+        timeOut = 30_000L,
+        // Một lần một unit, không retry: waterfall tuần tự nhanh hơn. Retry làm id
+        // chính fill muộn, tới lúc đó user đã rời splash — matched nhưng không show.
+        retryCount = 1,
+    )
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // Bắn request NGAY, song song với consent và Remote Config.
+        if (ads.isAdEnabled("inter_splash")) ads.loadInterAd(splashInterConfig)
+
+        ads.setIsSplash(true)
+        lifecycleScope.launch {
+            val shown = try {
+                ads.launchSplashAdFlow(splashInterConfig)
+            } finally {
+                // finally, KHÔNG phải dòng sau lệnh suspend: user bấm back giữa lúc chờ
+                // là scope bị huỷ và cờ splash kẹt true, chặn mọi app-open ad về sau.
+                ads.setIsSplash(false)
+            }
+            goToNextScreen()
+        }
+    }
+}</code></pre>
+
+<div class="warn">
+<strong>Bắt buộc cho user EEA/UK.</strong>
+Policy của Google yêu cầu app có lối vào để đổi/rút lại consent. Kiểm <code>ads.isPrivacyOptionsRequired</code> rồi hiện một mục trong Settings gọi <code>ads.showPrivacyOptionsForm(activity)</code>. Thiếu cái này là rủi ro bị gỡ app.
+</div>
+
+<div class="page-break"></div>
+
+<h2>6. Interstitial</h2>
+
+<pre><code>private val interConfig = InterAdConfig(
+    placement = "inter_next_screen",
+    reload = true,        // tự load lại sau khi hiện xong
+    retryCount = 2,
+    timeOut = 6_000L,
+    isShowLoading = true, // hiện dialog loading trong lúc chờ fill
+)
+
+// Warm sớm, ở màn trước đó
+ads.loadInterAd(interConfig)
+
+// Lúc chuyển màn
+lifecycleScope.launch {
+    ads.showInterAd(interConfig, placement = "inter_next_screen")
+    startActivity(Intent(this@Screen, NextActivity::class.java))
+}</code></pre>
+
+<p><code>showInterAd</code> trả về sau khi user đóng ad, và trả <code>false</code> nếu không có gì để hiện. Luôn đi tiếp bất kể kết quả — đừng chặn điều hướng vì một quảng cáo không fill.</p>
+
+<p>SDK tự áp <strong>frequency cap</strong> giữa hai interstitial bất kỳ (mặc định 20s, chỉnh bằng <code>settings.interMinIntervalMs</code>). Bấm nhanh qua nhiều màn sẽ không ăn liên tiếp hai quảng cáo toàn màn.</p>
+
+<h2>7. Native — một slot</h2>
+
+<p>Đặt view vào layout. Chọn template theo chỗ đặt:</p>
+
+<pre><code>&lt;com.freshness.ads.natives.LoadingNativeAdView1
+    android:id="@+id/nativeAd"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content" /&gt;</code></pre>
+
+<table>
+<tr><th>Class</th><th>Dùng cho</th></tr>
+<tr><td><code>LoadingNativeAdView1</code> … <code>View4</code></td><td>Bốn bố cục chuẩn, khác nhau ở vị trí media và nút CTA</td></tr>
+<tr><td><code>LoadingNativeAdSmallView</code></td><td>Dải nhỏ, không có ảnh lớn</td></tr>
+<tr><td><code>LoadingNativeAdHomeView</code> / <code>HomeCompactView</code></td><td>Khối trên màn chính</td></tr>
+<tr><td><code>LoadingNativeAdListView</code> / <code>CategoryView</code></td><td>Item chèn giữa danh sách</td></tr>
+<tr><td><code>LoadingNativeCtaTopView</code> / <code>CtaBottomView</code></td><td>CTA nằm trên / dưới</td></tr>
+<tr><td><code>LoadingNativeAdDisplayView</code></td><td>Khối lớn, nhiều ảnh</td></tr>
+<tr><td><code>LoadingNativeFullscreenView</code></td><td>Native chiếm trọn màn</td></tr>
+</table>
+
+<p>Tiền tố <code>Loading</code> nghĩa là view đã kèm shimmer: nó tự hiện khung xám trong lúc chờ và tự đổi sang ad khi có.</p>
+
+<p>Trong Activity/Fragment:</p>
+
+<pre><code>private fun showNativeAd() {
+    if (!ads.isAdEnabled("native_detail")) {
+        binding.nativeAd.isVisible = false
+        return
+    }
+    val service = ads.nativeAdService
+    service.preloadIfEmpty(applicationContext, key = "native_detail", placement = "native_detail")
+    bindNativeAdFromCache(
+        container = binding.nativeAd,
+        nativeAdService = service,
+        cacheKey = "native_detail",
+        // true cho màn một-lần: ad được huỷ khi màn chết, NHƯNG chỉ khi nó đã thật
+        // sự ăn impression. Fill chưa kịp hiện thì giữ lại cho lần vào sau.
+        releaseOnDestroy = true,
+    )
+}</code></pre>
+
+<div class="note">
+<strong>Hai khái niệm khác nhau: <code>key</code> và <code>placement</code>.</strong><br>
+<code>placement</code> quyết định <em>load id nào</em> (key trong <code>ads_id_config</code>).<br>
+<code>key</code> định danh <em>chỗ hiển thị</em> trong cache. Hai màn dùng chung một placement vẫn phải có key riêng, nếu không màn thứ hai sẽ bind đúng cái ad màn thứ nhất đang giữ.
+</div>
+
+<h3>Preload sớm một màn</h3>
+
+<p><code>preloadIfEmpty</code> là idempotent: gọi lại khi đã có ad hoặc đang load thì không phát thêm request. Nhờ vậy gọi được từ màn trước để ad sẵn sàng trước khi user tới:</p>
+
+<pre><code>// Ở màn A, hâm sẵn native của màn B
+ads.nativeAdService.preloadIfEmpty(applicationContext, "native_b", "native_b")</code></pre>
+
+<div class="page-break"></div>
+
+<h2>8. Native — pool cho danh sách</h2>
+
+<p>Danh sách chèn nhiều vị trí ad thì dùng <code>AdPoolManager</code>: nó preload sẵn một số ad và phát ngay khi adapter cần, thay vì load trong <code>onBindViewHolder</code> (vừa giật vừa phát dư request).</p>
+
+<pre><code>// Khai pool lúc install
+AdsGraph.install(
+    application = this,
+    config = AdsConfig(nativePools = mapOf("native_feed" to 3)),
+)
+
+// Hâm khi mở màn
+val pool = ads.adPoolManager
+pool.preloadIfEmpty("native_feed")
+
+// Trong adapter
+val ad = pool.getAd("native_feed", key = "native_feed_$position", owner = holder)
+if (ad != null) {
+    holder.adView.setNativeAd(ad)
+} else if (pool.isPlacementExhausted("native_feed")) {
+    holder.adView.isVisible = false   // hết ad thật, thu gọn slot
+}                                      // còn lại: để shimmer chạy tiếp
+
+// Khi holder bị recycle
+pool.releaseAd("native_feed", key = "native_feed_$position", owner = holder)</code></pre>
+
+<p>Muốn bind lại ngay khi có ad mới về, lắng nghe <code>pool.adReadyEvents</code>:</p>
+
+<pre><code>lifecycleScope.launch {
+    repeatOnLifecycle(Lifecycle.State.STARTED) {
+        pool.adReadyEvents.collect { placement ->
+            if (placement == "native_feed") adapter.notifyAdSlotsChanged()
+        }
+    }
+}</code></pre>
+
+<div class="danger">
+<strong>Pool size phải bằng số slot hiển thị CÙNG LÚC.</strong>
+Màn chỉ có một slot tĩnh mà khai <code>2</code> thì ad thứ hai không có đường ra: slot đã có ad rồi thì lần bind sau bỏ qua. Kết quả là mỗi phiên phát dư một request không bao giờ đổi được impression — show rate tụt thẳng. Chỉ tăng pool khi có feed thật sự hiển thị nhiều ad song song.
+</div>
+
+<p><code>owner</code> là tham số quan trọng: RecyclerView có thể tạo holder mới cho cùng một vị trí <em>trước khi</em> holder cũ bị recycle (ItemAnimator còn dựng hẳn holder thứ hai để crossfade). Truyền <code>owner</code> để pool chỉ huỷ ad khi không còn holder nào giữ nó. Không truyền thì holder cũ sẽ huỷ mất ad mà holder mới đang hiển thị, và frame sau crash <em>"trying to use a recycled bitmap"</em>.</p>
+
+<h2>9. Native full màn</h2>
+
+<p>Native chiếm trọn màn hình dùng làm fallback khi interstitial không fill, hoặc chèn giữa các bước onboarding. Dựng bằng một Activity riêng:</p>
+
+<pre><code>class NativeFullScreenActivity : AppCompatActivity() {
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        binding = ActivityNativeFullBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+
+        val service = AdsGraph.adsManager.nativeAdService
+        // Fill có thể biến mất giữa lúc màn gọi kiểm tra và lúc màn này dựng xong.
+        if (!service.isReady("native_full")) { finish(); return }
+
+        bindNativeAdFromCache(
+            container = binding.nativeFull,
+            nativeAdService = service,
+            cacheKey = "native_full",
+            releaseOnDestroy = true,
+        )
+        binding.btnClose.setOnClickListener { finish() }
+    }
+}</code></pre>
+
+<div class="warn">
+<strong>Luôn phải có đường thoát.</strong>
+Nút đóng phải hiện, và BACK phải chạy được. Muốn giữ impression đủ lâu để tính thì hoãn nút đóng vài giây bằng một <code>CountDownTimer</code> — nhưng đừng chặn BACK, và đừng để màn hình nào không thoát được.
+</div>
+
+<h2>10. Banner</h2>
+
+<pre><code>&lt;FrameLayout
+    android:id="@+id/bannerContainer"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content" /&gt;</code></pre>
+
+<pre><code>ads.bannerAdService.loadBannerAds(
+    context = this,
+    bannerView = binding.bannerContainer,
+    placement = "banner_home",
+    isCollapsible = false,
+    onLoadSuccess = { binding.bannerContainer.isVisible = true },
+    onLoadFail = { binding.bannerContainer.isVisible = false },
+)</code></pre>
+
+<p><code>isCollapsible = true</code> cho banner thu gọn được (user bấm mũi tên để xếp lại). Chỉ dùng ở banner neo đáy, và đừng dùng ở màn mà user quay lại liên tục — banner collapsible bung ra mỗi lần load là gây khó chịu.</p>
+
+<div class="page-break"></div>
+
+<h2>11. Rewarded</h2>
+
+<pre><code>private val rewardConfig = RewardAdConfig(
+    placement = "reward_unlock",
+    retryCount = 2,
+    timeOut = 20_000L,
+    isShowLoading = true,
+)
+
+ads.loadRewardAd(rewardConfig)   // warm trước
+
+lifecycleScope.launch {
+    var earned = false
+    val shown = ads.showRewardAd(
+        config = rewardConfig,
+        placement = "reward_unlock",
+        onShow = { /* quảng cáo đã hiện toàn màn — tắt spinner của bạn ở đây */ },
+        onReward = { earned = true },
+    )
+    if (shown &amp;&amp; earned) unlockFeature()
+    else showCouldNotLoadMessage()
+}</code></pre>
+
+<div class="warn">
+<strong>Đừng chờ giá trị trả về để tắt spinner.</strong>
+<code>showRewardAd</code> chỉ trả về <em>sau khi</em> user đóng quảng cáo. Call site nào đang giữ spinner chờ fill mà đợi giá trị trả về thì spinner nằm dưới quảng cáo suốt cả video rồi loé lên một nhịp lúc đóng. Dùng <code>onShow</code>.
+</div>
+
+<p>Và: hỏi quyền / kiểm điều kiện <strong>trước</strong> khi mở quảng cáo. Bắt user xem hết video rồi mới báo "thiếu quyền" là lừa họ bỏ công lấy một thứ không nhận được.</p>
+
+<h2>12. App-open</h2>
+
+<p>App-open ad hiện khi user quay lại app từ background. SDK tự theo dõi vòng đời process; app chỉ cần cung cấp một Activity đục để che nội dung:</p>
+
+<pre><code>// Application.onCreate
+AdsGraph.adsManager.setOnShowOpenAdListener {
+    AdsGraph.adsManager.topActivity.get()?.let { OpenAdActivity.start(it) }
+}
+
+// OpenAdActivity: theme trong suốt/đục, không layout
+class OpenAdActivity : AppCompatActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        onBackPressedDispatcher.addCallback(this) { /* chặn back khi ad đang chạy */ }
+        lifecycleScope.launch {
+            AdsGraph.adsManager.openAdService.showAdIfAvailable(WeakReference(this@OpenAdActivity))
+            finish()   // đóng dù có ad hay không, đừng để lại màn trắng
+            overridePendingTransition(0, 0)
+        }
+    }
+}</code></pre>
+
+<p>Tạm tắt app-open cho một lần quay lại (ví dụ user vừa đi ra ngoài chọn ảnh rồi quay vào):</p>
+<pre><code>ads.setSkipOpenAd(true)</code></pre>
+
+<div class="warn">
+<strong>Bắt buộc: che nội dung app.</strong>
+Policy AdMob không cho user thấy nội dung app phía sau app-open ad. Không có Activity che là vi phạm.
+</div>
+
+<h2>13. Remote Config</h2>
+
+<p>SDK đọc <strong>đúng một</strong> key Firebase Remote Config: <code>ads_id_config</code>. Giá trị là toàn bộ JSON ở mục 3.</p>
+
+<p>Ghi đè theo <strong>từng placement</strong>: key nào có trên Remote Config thì bản đó thắng trọn vẹn, key nào thiếu thì rơi về file assets. Nhờ vậy đẩy lên RC một placement duy nhất là chỉnh được riêng nó.</p>
+
+<pre><code>// Đọc settings
+val timeout = ads.remoteConfig.splashTimeoutMs ?: 30_000L
+
+// Kiểm công tắc một chỗ đặt ad
+if (ads.isAdEnabled("native_home")) { /* ... */ }</code></pre>
+
+<div class="note">
+<strong>Payload hỏng không làm mất ads.</strong>
+JSON rỗng, null hoặc parse lỗi đều bị bỏ qua và catalog giữ nguyên bản đang dùng. SDK không bao giờ tự đẩy mình về trạng thái rỗng — đó là cách nhanh nhất để mất sạch doanh thu vì một dấu phẩy thừa.
+</div>
+
+<div class="page-break"></div>
+
+<h2>14. ProGuard / R8</h2>
+
+<p>Rule của SDK đi kèm trong AAR (<code>consumer-rules.pro</code>), tự áp vào app khi minify. Không phải chép gì.</p>
+
+<p>Rule đã bao gồm: model JSON cấu hình, native ad view inflate từ XML, GMA next-gen + mediation adapter, Unity Ads, và constructor Room mà WorkManager gọi bằng reflection.</p>
+
+<div class="danger">
+<strong>Nếu release crash ngay khi mở app</strong> với <code>Failed to create an instance of androidx.work.impl.WorkDatabase</code>: WorkManager đi kèm GMA và Unity Ads, nó dựng một Room database từ <code>androidx.startup</code> — trước cả <code>Application</code>. Rule này đã có sẵn trong SDK; chỉ khi bạn tự tắt consumer rules mới cần thêm tay:
+<pre><code>-keep class * extends androidx.room.RoomDatabase { &lt;init&gt;(); }</code></pre>
+</div>
+
+<h2>15. Mediation Unity Ads</h2>
+
+<p>Adapter Unity đã nằm trong SDK. Không cần khai gì trong manifest, không cần code init — adapter tự nhận cấu hình từ mediation group phía AdMob lúc chạy.</p>
+
+<div class="danger">
+<strong>Phải tạo mediation group trên AdMob TRƯỚC khi phát hành.</strong>
+Chưa có group thì adapter nhận cấu hình rỗng, nó init bằng một app id giả và <em>giữ luôn callback init của GMA</em>. Đo thực tế: <code>MobileAds.initialize</code> mất ~30 giây thay vì ~2,2 giây — đủ để mọi request đầu phiên thấy "SDK not ready" và interstitial splash không bao giờ kịp hiện.<br><br>
+Triệu chứng nhìn giống hệt lỗi code, nhưng nguyên nhân nằm ở cấu hình phía AdMob.
+</div>
+
+<p>Version của adapter và của Unity SDK phải đi thành cặp: ba số đầu của adapter khớp version SDK nó bọc (adapter <code>4.18.0.x</code> bọc <code>unity-ads 4.18.0</code>). SDK này ghim cặp <code>4.18</code> vì đó là cấu hình đã chạy production cùng GMA next-gen <code>1.2.1</code>. Đừng nâng lên bản mới hơn chỉ vì nó mới hơn — adapter mediation phải khớp với GMA next-gen, và chuyện đó chỉ kiểm được bằng một app đang sống.</p>
+
+<h2>16. Test và debug</h2>
+
+<p>Debug build <strong>mặc định ép test id của Google</strong>, bất kể id thật trong config. Nhờ vậy dev không bao giờ vô tình bấm vào quảng cáo thật (dẫn tới khoá tài khoản AdMob).</p>
+
+<p>Muốn debug dùng id thật + waterfall thật:</p>
+<pre><code>AdsGraph.adUnitCatalog.useRealIds = true</code></pre>
+
+<p>Bắt buộc phải bật khi cần kiểm hành vi rớt tier: với test id thì tier nào cũng fill, và waterfall không bao giờ rớt xuống tier sau. Release build bỏ qua hoàn toàn cờ này.</p>
+
+<p>Log: SDK dùng Timber và chỉ plant cây log ở build debuggable, nên release không in gì. Lọc theo tag:</p>
+<pre><code>adb logcat -s NativeAds AdPool OpenAdProvider AdsManager AdsInitializer</code></pre>
+
+<h2>17. Những lỗi làm tụt show rate</h2>
+
+<p>Show rate = impression ÷ matched request. Con số thấp nghĩa là bạn xin ad về rồi không dùng — và AdMob nhìn thấy điều đó.</p>
+
+<table>
+<tr><th>Triệu chứng</th><th>Nguyên nhân thường gặp</th><th>Cách sửa</th></tr>
+<tr>
+  <td>Một placement chỉ vài phần trăm</td>
+  <td>Preload ở mọi phiên nhưng chỉ hiển thị ở một nhánh hiếm ai đi vào</td>
+  <td>Hoặc thôi preload nó, hoặc tìm chỗ hiện nó ở luồng chính</td>
+</tr>
+<tr>
+  <td>Đúng khoảng 50%</td>
+  <td>Pool size 2 mà màn chỉ có một slot</td>
+  <td>Đặt pool size bằng số slot hiển thị cùng lúc</td>
+</tr>
+<tr>
+  <td>Native cứ vào lại màn là tụt</td>
+  <td>Huỷ ad khi màn chết dù nó chưa từng hiện</td>
+  <td>Dùng <code>releaseOnDestroy = true</code> — SDK chỉ huỷ ad đã ăn impression, fill chưa hiện được giữ lại cho lần sau</td>
+</tr>
+<tr>
+  <td>App-open thấp kinh niên</td>
+  <td>Bản chất format: luôn phải ôm sẵn một ad cho lần quay lại có thể không bao giờ tới</td>
+  <td>Trần lý thuyết là <code>R/(R+1)</code> với R là số lần quay lại mỗi phiên. Đừng đánh đổi impression để kéo con số này lên</td>
+</tr>
+<tr>
+  <td>Interstitial splash matched mà không show</td>
+  <td><code>retryCount</code> lớn làm id chính fill muộn, tới lúc đó user đã rời splash</td>
+  <td>Đặt <code>retryCount = 1</code>, để waterfall tuần tự xuống tier sau</td>
+</tr>
+</table>
+
+<h3>Nguyên tắc gọn</h3>
+<ul>
+  <li>Chỉ preload thứ bạn thật sự sẽ hiển thị, ở luồng người ta thật sự đi qua.</li>
+  <li>Pool size = số slot nhìn thấy cùng lúc. Không hơn.</li>
+  <li>Fill chưa hiện là tiền chưa tiêu — giữ lại, đừng huỷ.</li>
+  <li>Ad không fill thì thu gọn slot, đừng để shimmer chạy mãi.</li>
+  <li>Đừng chặn điều hướng vì một quảng cáo. Ad không về thì cho user đi tiếp.</li>
+</ul>
+
+<hr>
+<p class="footer">Freshness Ads 1.0.0 — <code>com.github.huyvqit:freshness-ads</code></p>
+
+</body>
+</html>

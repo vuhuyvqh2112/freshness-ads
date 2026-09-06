@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Nút CTA của mọi template native: gradient xanh ngọc đậm, chữ trắng. Cùng hệ màu với app nhưng
+     tối hơn hẳn, để nút quảng cáo không bị nhìn lẫn với nút thật trong app. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+
+    <gradient
+        android:angle="180"
+        android:endColor="@color/ads_brand_deep"
+        android:startColor="@color/ads_brand" />
+    <corners android:radius="@dimen/size100" />
+</shape>
