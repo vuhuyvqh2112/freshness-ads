@@ -22,10 +22,12 @@ dependencyResolutionManagement {
     }
 }
 
-// The library IS the root project: publishing it from the root keeps the short
-// com.github.<user>:freshness-ads coordinate. Extra artifacts live in subprojects that publish
-// under the SAME group (see compose/build.gradle.kts), so JitPack serves them next to it as
-// com.github.<user>:freshness-ads-<module> — no coordinate change for existing consumers.
+// The library IS the root project. With more than one module JitPack publishes every artifact
+// under the multi-module group com.github.<user>.<repo>:<artifactId> (verified on the 1.1.0 build
+// log), and turns the old single-module coordinate com.github.<user>:freshness-ads into an
+// aggregator POM that pulls ALL modules. Consumers must use
+//   com.github.vuhuyvqh2112.freshness-ads:freshness-ads
+//   com.github.vuhuyvqh2112.freshness-ads:freshness-ads-compose
 rootProject.name = "freshness-ads"
 
 include(":compose")

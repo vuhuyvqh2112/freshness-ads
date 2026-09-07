@@ -3,9 +3,9 @@ plugins {
     `maven-publish`
 }
 
-// JitPack resolves com.github.<user>:<repo>:<tag>, so the group has to be exactly
-// com.github.<user> and the artifact id the repository name. Publishing under any
-// other coordinate builds fine locally and then 404s on JitPack.
+// JitPack only indexes artifacts installed under group com.github.<user>; it then serves a
+// multi-module build as com.github.<user>.<repo>:<artifactId> (see settings.gradle.kts).
+// Publishing under any other group builds fine locally and then 404s on JitPack.
 group = "com.github.vuhuyvqh2112"
 version = "1.1.0"
 

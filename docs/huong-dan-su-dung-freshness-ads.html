@@ -125,11 +125,16 @@
 
 <p>Trong <code>app/build.gradle.kts</code>:</p>
 <pre><code>dependencies {
-    implementation("com.github.vuhuyvqh2112:freshness-ads:1.1.0")
+    implementation("com.github.vuhuyvqh2112.freshness-ads:freshness-ads:1.1.0")
 }</code></pre>
 
 <p>App dùng Jetpack Compose thêm module wrapper (kéo theo SDK chính, không phải khai cả hai) <span class="tag">1.1.0+</span>:</p>
-<pre><code>implementation("com.github.vuhuyvqh2112:freshness-ads-compose:1.1.0")</code></pre>
+<pre><code>implementation("com.github.vuhuyvqh2112.freshness-ads:freshness-ads-compose:1.1.0")</code></pre>
+
+<div class="warn">
+<strong>Group đổi từ 1.1.0.</strong>
+Repo có hai module nên JitPack publish dưới group <code>com.github.vuhuyvqh2112.freshness-ads</code>. Coordinate cũ <code>com.github.vuhuyvqh2112:freshness-ads</code> vẫn resolve được, nhưng ở 1.1.0 nó là POM gom <em>cả hai</em> module — app không dùng Compose sẽ bị kéo thêm runtime Compose. Đổi sang dạng trên khi nâng cấp.
+</div>
 
 <p>Không cần khai thêm GMA SDK, UMP, Unity adapter hay Firebase Config — POM của SDK đã mang theo hết. Từ 1.0.1, <code>androidx.lifecycle</code> cũng đi kèm (khai <code>api</code>) vì <code>bindNativeAdFromCache</code> là extension trên <code>LifecycleOwner</code>.</p>
 
@@ -1003,7 +1008,7 @@ Các bản trước đọc <code>BuildConfig.DEBUG</code> của chính thư vi�
 <tr>
   <td><strong>1.1.0</strong></td>
   <td><strong>Compose:</strong> module <code>freshness-ads-compose</code> với <code>NativeAd</code>, <code>BannerAd</code>, <code>rememberFullScreenAdShowing</code>. <strong>Native:</strong> <code>LoadingNativeAdTemplateView</code> / <code>NativeAdTemplateView</code> bind layout XML của app theo id quy ước. <strong>Rewarded interstitial:</strong> format <code>rewardedInter</code>, <code>loadAndShowRewardedInterAd</code>. <strong>Analytics:</strong> <code>AdsGraph.addListener(AdsListener)</code> với <code>onAdPaid(AdRevenue)</code> cho mọi format, tự gửi <code>ad_impression</code> lên Firebase. <strong>Full-screen:</strong> ad đã nạp hết hạn sau 1 giờ; <code>showInterAdOutcome</code>/<code>showRewardAdOutcome</code> trả <code>AdShowOutcome</code>; <code>isFullScreenAdShowing</code> gộp ba format; <code>openAdExcludedActivities</code>. <strong>Native:</strong> <code>NativeAdOptions</code> (video tắt tiếng mặc định, tỉ lệ media, AdChoices) ghi đè được per placement; nạp lại slot sau click và sau video. <strong>Banner:</strong> <code>BannerSize</code> ANCHORED / INLINE / MREC. <code>settings.enableLogForTester</code> bật log trên release. <strong>Remote Config</strong> <code>ads_id_config</code> ghi đè theo từng field (chỉ gửi phần thay đổi); thêm <code>hf</code>, <code>ids</code> dạng chuỗi thuần, <code>settings</code> key tuỳ ý với <code>remoteConfig.long/bool/string</code>, <code>adUnitCatalog.describe()</code>. Nhánh debug đọc cờ debuggable của app host (trước đây không bao giờ bật trong app host). Firebase và Crashlytics thành tuỳ chọn. Remote Config: dùng giá trị đã activate khi fetch lỗi/throttle, khoảng fetch 1 giờ ở release. Interstitial có guard chống hai lần show chồng nhau; callback GMA hop về main trước khi sửa state. <code>loadAndShowInterAd</code> kiểm frequency cap trước khi nạp. Thêm <code>AdsConfig.isPremium</code>, <code>useRealIdsInDebug</code>, <code>consentTestDeviceIds</code>; overload ngắn <code>showInterAd("key")</code>, <code>loadAndShowRewardAd("key")</code>; <code>resetInterTimer</code> lên interface. <code>isCollapsible</code> deprecated. Các provider chuyển <code>internal</code>.</td>
-  <td><strong>Native video giờ mặc định tắt tiếng</strong> — muốn giữ tiếng thì <code>NativeAdOptions(videoMuted = false)</code>. App đang gọi <code>Timber.plant</code> riêng không bị ảnh hưởng. Payload RC cũ vẫn chạy nguyên (field thiếu giờ giữ của asset thay vì rỗng — chỉ khác khi RC cố ý gửi placement thiếu <code>ids</code>). Đang set <code>AdsGraph.adUnitCatalog.useRealIds</code> thì đổi sang <code>AdsConfig(useRealIdsInDebug = true)</code>. Đang gọi thẳng class <code>*Provider</code> thì đi qua <code>AdsGraph</code>. Splash nên thêm <code>isShowLoading = false</code>. Debug build của app giờ thật sự dùng test id — muốn id thật thì bật cờ trên.</td>
+  <td><strong>Đổi coordinate</strong> sang <code>com.github.vuhuyvqh2112.freshness-ads:freshness-ads</code> (mục 2). <strong>Native video giờ mặc định tắt tiếng</strong> — muốn giữ tiếng thì <code>NativeAdOptions(videoMuted = false)</code>. App đang gọi <code>Timber.plant</code> riêng không bị ảnh hưởng. Payload RC cũ vẫn chạy nguyên (field thiếu giờ giữ của asset thay vì rỗng — chỉ khác khi RC cố ý gửi placement thiếu <code>ids</code>). Đang set <code>AdsGraph.adUnitCatalog.useRealIds</code> thì đổi sang <code>AdsConfig(useRealIdsInDebug = true)</code>. Đang gọi thẳng class <code>*Provider</code> thì đi qua <code>AdsGraph</code>. Splash nên thêm <code>isShowLoading = false</code>. Debug build của app giờ thật sự dùng test id — muốn id thật thì bật cờ trên.</td>
 </tr>
 </table>
 

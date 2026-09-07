@@ -4,8 +4,8 @@ plugins {
     `maven-publish`
 }
 
-// Cùng group với root để JitPack phục vụ artifact này cạnh freshness-ads:
-// implementation("com.github.vuhuyvqh2112:freshness-ads-compose:<tag>")
+// Cùng group với root. JitPack publish cả hai dưới group multi-module, xem settings.gradle.kts:
+// implementation("com.github.vuhuyvqh2112.freshness-ads:freshness-ads-compose:<tag>")
 group = "com.github.vuhuyvqh2112"
 version = rootProject.version
 

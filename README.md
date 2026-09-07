@@ -25,10 +25,13 @@ dependencyResolutionManagement {
 `app/build.gradle.kts`:
 
 ```kotlin
-implementation("com.github.vuhuyvqh2112:freshness-ads:1.1.0")
+implementation("com.github.vuhuyvqh2112.freshness-ads:freshness-ads:1.1.0")
+
+// App dùng Jetpack Compose: thêm dòng này, nó kéo theo SDK chính
+implementation("com.github.vuhuyvqh2112.freshness-ads:freshness-ads-compose:1.1.0")
 ```
 
-App dùng Jetpack Compose thêm `implementation("com.github.vuhuyvqh2112:freshness-ads-compose:1.1.0")` (kéo theo SDK chính).
+Từ 1.1.0 repo có hai module nên JitPack đổi group sang `com.github.vuhuyvqh2112.freshness-ads`. Coordinate cũ `com.github.vuhuyvqh2112:freshness-ads` vẫn resolve nhưng là POM gom **cả hai** module — app không dùng Compose sẽ bị kéo thêm runtime Compose, nên đổi sang dạng trên.
 
 Không cần khai thêm GMA SDK, UMP, Unity adapter hay Firebase Config — POM đã mang theo hết.
 
