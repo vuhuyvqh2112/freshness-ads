@@ -9,10 +9,11 @@ import androidx.annotation.Keep
  * Cả hai đã bị bỏ: công tắc placement giờ nằm trong `ads_id_config.placements.<key>.enable` (một nguồn
  * sự thật duy nhất), và `ads_remote_config` không còn được đọc nữa.
  *
- * Ba field chỉ có ở đây vì còn consumer thật; 3 field cũ (`shouldShowIapOnGetTheme`,
- * `isOnboardingEnable`, `isOnboardingSecondEnable`) chưa từng được đọc ở đâu nên đã xoá.
+ * Ba field có tên là những setting SDK tự dùng. Mọi key khác app host đặt trong `settings` của
+ * payload đều đọc được qua [long] / [bool] / [string] — cùng một lần fetch với id quảng cáo, không
+ * phải tự gọi Firebase riêng (và không lệch khoảng fetch/throttle với SDK).
  *
- * Vẫn để nullable: giá trị đi ra từ JSON qua Gson, field thiếu là null chứ không nhận default.
+ * Vẫn để nullable: giá trị đi ra từ JSON, field thiếu là null chứ không nhận default.
  */
 @Keep
 data class RemoteConfig(
@@ -30,5 +31,27 @@ data class RemoteConfig(
      * `<= 0` hoặc thiếu field = dùng `RewardAdConfig.timeOut` mà màn hình gọi khai báo (20s).
      */
     val rewardTimeoutMs: Long? = 20_000L,
-    val isFetched: Boolean? = false
-)
+    val isFetched: Boolean? = false,
+    /**
+     * Toàn bộ `settings` đang có hiệu lực (asset đã được Remote Config ghi đè theo key). Giá trị chỉ
+     * là Boolean / Long / Double / String. Đọc qua [long], [bool], [string] thay vì chạm map.
+     */
+    val settings: Map<String, Any> = emptyMap(),
+) {
+    /** Số nguyên, nhận cả khi console ghi dạng chuỗi `"3"`. Thiếu hoặc sai kiểu = [default]. */
+    fun long(key: String, default: Long): Long = when (val v = settings[key]) {
+        is Number -> v.toLong()
+        is String -> v.toLongOrNull() ?: default
+        else -> default
+    }
+
+    /** Boolean, nhận cả `"true"`/`"false"` dạng chuỗi. Thiếu hoặc sai kiểu = [default]. */
+    fun bool(key: String, default: Boolean): Boolean = when (val v = settings[key]) {
+        is Boolean -> v
+        is String -> v.toBooleanStrictOrNull() ?: default
+        else -> default
+    }
+
+    /** Chuỗi; số/boolean cũng được đổi sang chuỗi. Thiếu = [default]. */
+    fun string(key: String, default: String): String = settings[key]?.toString() ?: default
+}

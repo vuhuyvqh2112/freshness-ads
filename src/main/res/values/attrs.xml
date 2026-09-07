@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- LoadingNativeAdTemplateView: layout template của app + (tuỳ chọn) layout shimmer riêng. -->
+    <declare-styleable name="LoadingNativeAdTemplateView">
+        <attr name="adLayout" format="reference" />
+        <attr name="adShimmerLayout" format="reference" />
+    </declare-styleable>
+</resources>

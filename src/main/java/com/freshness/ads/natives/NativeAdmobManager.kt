@@ -2,8 +2,10 @@ package com.freshness.ads.natives
 
 import android.os.Handler
 import android.os.Looper
+import com.freshness.ads.config.AdFormat
 import com.freshness.ads.config.AdLoadBudget
 import com.freshness.ads.consent.AdInitGate
+import com.freshness.ads.events.AdsEvents
 import com.google.android.libraries.ads.mobile.sdk.common.LoadAdError
 import com.google.android.libraries.ads.mobile.sdk.nativead.NativeAd
 import com.google.android.libraries.ads.mobile.sdk.nativead.NativeAdLoader
@@ -12,13 +14,13 @@ import com.google.android.libraries.ads.mobile.sdk.nativead.NativeAdRequest
 import timber.log.Timber
 
 
-object NativeAdmobManager {
+internal object NativeAdmobManager {
     private const val TAG = "NativeAdmobManager"
 
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    private fun buildRequest(nativeId: String): NativeAdRequest =
-        NativeAdRequest.Builder(nativeId, listOf(NativeAd.NativeAdType.NATIVE)).build()
+    private fun buildRequest(nativeId: String, options: NativeAdOptions): NativeAdRequest =
+        NativeAdRequest.Builder(nativeId, listOf(NativeAd.NativeAdType.NATIVE)).apply(options).build()
 
     /**
      * Load native theo waterfall: thử [ids] lần lượt, id nào fill thì dừng.
@@ -40,12 +42,14 @@ object NativeAdmobManager {
         placement: String,
         ids: List<String>,
         budget: AdLoadBudget,
+        options: NativeAdOptions,
         onLoadSuccess: (NativeAd) -> Unit,
         onLoadFail: () -> Unit,
         onLateAd: ((NativeAd) -> Unit)? = null,
     ) {
         if (!isEnableAd || ids.isEmpty()) {
             Timber.d("$TAG WATERFALL skip placement=$placement (enable=$isEnableAd tiers=${ids.size})")
+            AdsEvents.failedToLoad(placement, AdFormat.NATIVE, if (isEnableAd) "no ids" else "disabled")
             onLoadFail()
             return
         }
@@ -56,10 +60,11 @@ object NativeAdmobManager {
             timeoutMs = AdInitGate.PASSIVE_AWAIT_TIMEOUT_MS,
             onUnavailable = {
                 Timber.w("$TAG WATERFALL skip placement=$placement (SDK not ready)")
+                AdsEvents.failedToLoad(placement, AdFormat.NATIVE, "sdk not ready")
                 onLoadFail()
             }
         ) {
-            WaterfallRun(placement, ids, budget, onLoadSuccess, onLoadFail, onLateAd).start()
+            WaterfallRun(placement, ids, budget, options, onLoadSuccess, onLoadFail, onLateAd).start()
         }
     }
 
@@ -71,6 +76,7 @@ object NativeAdmobManager {
         private val placement: String,
         private val ids: List<String>,
         private val budget: AdLoadBudget,
+        private val options: NativeAdOptions,
         private val onLoadSuccess: (NativeAd) -> Unit,
         private val onLoadFail: () -> Unit,
         private val onLateAd: ((NativeAd) -> Unit)?,
@@ -111,7 +117,7 @@ object NativeAdmobManager {
             mainHandler.postDelayed(timeout, tierBudget)
 
             NativeAdLoader.load(
-                buildRequest(id),
+                buildRequest(id, options),
                 object : NativeAdLoaderCallback {
                     override fun onNativeAdLoaded(nativeAd: NativeAd) {
                         val latency = android.os.SystemClock.elapsedRealtime() - startedAt
@@ -145,7 +151,13 @@ object NativeAdmobManager {
                 return
             }
             finished = true
-            if (ad != null) onLoadSuccess(ad) else onLoadFail()
+            if (ad != null) {
+                AdsEvents.loaded(placement, AdFormat.NATIVE)
+                onLoadSuccess(ad)
+            } else {
+                AdsEvents.failedToLoad(placement, AdFormat.NATIVE, "no fill")
+                onLoadFail()
+            }
         }
 
         /** Ad về muộn: đưa cho chủ sở hữu cache, không có ai nhận thì huỷ để khỏi rò bộ nhớ. */

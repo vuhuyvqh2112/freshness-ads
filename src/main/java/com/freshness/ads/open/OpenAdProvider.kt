@@ -2,11 +2,15 @@ package com.freshness.ads.open
 
 import android.app.Activity
 import android.app.Application
-import android.content.Context
+import android.os.SystemClock
 import com.freshness.ads.config.AdBudgets
+import com.freshness.ads.config.AdFormat
 import com.freshness.ads.config.AdUnitCatalog
+import com.freshness.ads.events.AdsEvents
+import com.google.android.libraries.ads.mobile.sdk.common.AdValue
+import java.util.concurrent.CopyOnWriteArraySet
 import com.freshness.ads.consent.AdInitGate
-import com.freshness.ads.consent.GoogleMobileAdsConsentManager
+import com.freshness.ads.consent.ConsentService
 import com.freshness.ads.datastore.AdsDataStore
 import com.freshness.ads.extensions.safeResume
 import com.google.android.libraries.ads.mobile.sdk.appopen.AppOpenAd
@@ -28,21 +32,32 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import java.lang.ref.WeakReference
-import java.util.Date
 
-class OpenAdProvider constructor(
-    private val context: Context,
+internal class OpenAdProvider(
     private val dataStore: AdsDataStore,
     private val catalog: AdUnitCatalog,
+    private val consentService: ConsentService,
     /** Xem [com.freshness.ads.config.AdsConfig.openAdPlacement]. App-open load ngầm theo vòng đời
      *  process nên không có call site nào truyền key vào — SDK phải biết sẵn. */
     private val placement: String,
+    excludedActivities: Set<Class<out Activity>> = emptySet(),
 ) : OpenAdService {
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-    private val googleMobileAdsConsentManager: GoogleMobileAdsConsentManager by lazy {
-        GoogleMobileAdsConsentManager.getInstance(context)
+    private val excluded = CopyOnWriteArraySet<Class<out Activity>>(excludedActivities)
+
+    override fun excludeActivity(activityClass: Class<out Activity>) {
+        excluded.add(activityClass)
+    }
+
+    override fun includeActivity(activityClass: Class<out Activity>) {
+        excluded.remove(activityClass)
+    }
+
+    override fun isExcluded(activity: Activity?): Boolean {
+        val host = activity ?: return false
+        return excluded.any { it.isInstance(host) }
     }
 
     override fun init(app: Application) {
@@ -130,6 +145,7 @@ class OpenAdProvider constructor(
         val ids = catalog.idsFor(placement)
         if (ids.isEmpty()) {
             Timber.w("$TAG SKIP open ad (không có id nào bật)")
+            AdsEvents.failedToLoad(placement, FORMAT, "no ids")
             return false
         }
         val budget = catalog.budgetSpecFor(placement, AdBudgets.OPEN).budgetFor(ids.size)
@@ -140,6 +156,7 @@ class OpenAdProvider constructor(
                 val tierBudget = budget.nextTierBudget(isLastTier = index == ids.lastIndex)
                 if (tierBudget <= 0L) {
                     Timber.w("$TAG WATERFALL open hết ngân sách ở tier ${index + 1}/${ids.size}")
+                    AdsEvents.failedToLoad(placement, FORMAT, "budget exhausted")
                     return false
                 }
                 Timber.d("$TAG WATERFALL open tier=${index + 1}/${ids.size} id=$id cap=${tierBudget}ms")
@@ -151,12 +168,14 @@ class OpenAdProvider constructor(
                 when {
                     loaded == true -> {
                         Timber.d("$TAG WATERFALL open tier=${index + 1} FILL")
+                        AdsEvents.loaded(placement, FORMAT)
                         return true
                     }
                     loaded == null -> Timber.w("$TAG WATERFALL open tier=${index + 1} TIMEOUT — vẫn hứng ad về muộn")
                     else -> Timber.e("$TAG WATERFALL open tier=${index + 1} NO_FILL")
                 }
             }
+            AdsEvents.failedToLoad(placement, FORMAT, "no fill")
             return false
         } finally {
             isLoadingAd = false
@@ -171,7 +190,7 @@ class OpenAdProvider constructor(
             object : AdLoadCallback<AppOpenAd> {
                 override fun onAdLoaded(ad: AppOpenAd) {
                     appOpenAd = ad
-                    loadTime = Date().time
+                    loadTime = SystemClock.elapsedRealtime()
                     Timber.d("$TAG onAdLoaded id=$id")
                     it.safeResume(true)
                 }
@@ -184,11 +203,9 @@ class OpenAdProvider constructor(
         )
     }
 
-    private fun wasLoadTimeLessThanNHoursAgo(numHours: Long): Boolean {
-        val dateDifference: Long = Date().time - loadTime
-        val numMilliSecondsPerHour: Long = 3600000
-        return dateDifference < numMilliSecondsPerHour * numHours
-    }
+    /** `elapsedRealtime` chứ không phải wall clock: đổi giờ hệ thống không làm ad hết hạn sớm/muộn. */
+    private fun wasLoadTimeLessThanNHoursAgo(numHours: Long): Boolean =
+        SystemClock.elapsedRealtime() - loadTime < numHours * 3_600_000L
 
     private fun isAdAvailable(): Boolean {
         return appOpenAd != null && wasLoadTimeLessThanNHoursAgo(4)
@@ -208,7 +225,7 @@ class OpenAdProvider constructor(
 
             if (!isAdAvailable()) {
                 Timber.d("$TAG The app open ad is not ready yet.")
-                if (googleMobileAdsConsentManager.canRequestAds) {
+                if (consentService.canRequestAds) {
                     loadAd()
                 }
                 it.safeResume(false)
@@ -225,17 +242,28 @@ class OpenAdProvider constructor(
                 it.safeResume(false)
                 return@suspendCancellableCoroutine
             }
+            if (isExcluded(host)) {
+                Timber.d("$TAG ${host.javaClass.simpleName} nằm trong danh sách loại trừ — không hiện app-open")
+                it.safeResume(false)
+                return@suspendCancellableCoroutine
+            }
 
             Timber.d("$TAG Will show ad.")
 
             ad.adEventCallback =
                 object : AppOpenAdEventCallback {
-                    override fun onAdDismissedFullScreenContent() {
+                    // GMA next-gen bắn callback trên luồng nền của nó; state của provider chỉ được
+                    // sửa trên main nên hop về đó trước.
+                    override fun onAdImpression() = AdsEvents.impression(placement, FORMAT)
+                    override fun onAdClicked() = AdsEvents.clicked(placement, FORMAT)
+                    override fun onAdPaid(value: AdValue) = AdsEvents.paid(placement, FORMAT, value)
+
+                    override fun onAdDismissedFullScreenContent() = onMain {
+                        AdsEvents.closed(placement, FORMAT)
                         // Set the reference to null so isAdAvailable() returns false.
                         appOpenAd = null
                         isShowingAd = false
-                        Timber.d("$TAG onAdDismissedFullScreenContent. ${googleMobileAdsConsentManager.canRequestAds}")
-                        if (googleMobileAdsConsentManager.canRequestAds) {
+                        if (consentService.canRequestAds) {
                             Timber.d("$TAG onAdDismissedFullScreenContent. loadAd")
                             loadAd()
                         }
@@ -244,14 +272,12 @@ class OpenAdProvider constructor(
 
                     override fun onAdFailedToShowFullScreenContent(
                         fullScreenContentError: FullScreenContentError
-                    ) {
+                    ) = onMain {
+                        AdsEvents.failedToShow(placement, FORMAT, fullScreenContentError.message)
                         appOpenAd = null
                         isShowingAd = false
-                        Timber.d(
-                            "OpenAdProvider onAdFailedToShowFullScreenContent: %s",
-                            fullScreenContentError.message
-                        )
-                        if (googleMobileAdsConsentManager.canRequestAds) {
+                        Timber.d("$TAG onAdFailedToShowFullScreenContent: %s", fullScreenContentError.message)
+                        if (consentService.canRequestAds) {
                             loadAd()
                         }
                         it.safeResume(false)
@@ -259,17 +285,23 @@ class OpenAdProvider constructor(
 
                     override fun onAdShowedFullScreenContent() {
                         Timber.d("$TAG onAdShowedFullScreenContent.")
+                        AdsEvents.showed(placement, FORMAT)
                     }
                 }
             isShowingAd = true
             // show() ném = không có callback nào tới, nên phải tự gỡ cờ ở đây.
             runCatching { ad.show(host) }.onFailure { error ->
                 Timber.e("$TAG show() failed: ${error.message}")
+                AdsEvents.failedToShow(placement, FORMAT, error.message)
                 appOpenAd = null
                 isShowingAd = false
                 it.safeResume(false)
             }
         }
+
+    private fun onMain(block: () -> Unit) {
+        scope.launch { block() }
+    }
 
     override fun reset() {
         appOpenAd = null
@@ -277,5 +309,6 @@ class OpenAdProvider constructor(
 
     companion object {
         const val TAG = "OpenAdProvider"
+        private val FORMAT = AdFormat.APP_OPEN
     }
 }

@@ -4,7 +4,8 @@ import android.app.Activity
 import android.app.Application
 import android.content.Context
 import android.content.pm.PackageManager
-import com.freshness.ads.open.OpenAdProvider.Companion.TAG
+import com.freshness.ads.config.AdsConfig
+import com.freshness.ads.config.isHostDebuggable
 import com.google.android.libraries.ads.mobile.sdk.MobileAds
 import com.google.android.libraries.ads.mobile.sdk.initialization.InitializationConfig
 import com.google.android.ump.FormError
@@ -22,17 +23,27 @@ import timber.log.Timber
 import java.lang.ref.WeakReference
 import java.util.concurrent.atomic.AtomicBoolean
 
-class ConsentProvider constructor(
+internal class ConsentProvider(
     private val context: Context,
-): ConsentService {
+    /** Debug settings của UMP đọc từ đây, và CHỈ khi app host debuggable. */
+    config: AdsConfig,
+) : ConsentService {
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     private val isMobileAdsInitializeCalled = AtomicBoolean(false)
 
-    private val googleMobileAdsConsentManager: GoogleMobileAdsConsentManager by lazy {
-        GoogleMobileAdsConsentManager.getInstance(context)
-    }
+    private val googleMobileAdsConsentManager = GoogleMobileAdsConsentManager(
+        context,
+        debugConfig = if (context.isHostDebuggable()) {
+            ConsentDebugConfig(
+                forceEea = config.consentDebugGeographyEea,
+                testDeviceHashedIds = config.consentTestDeviceIds,
+            )
+        } else {
+            null
+        },
+    )
 
     private val _isAdInitialized = MutableStateFlow(false)
     override val isAdInitialized = _isAdInitialized.asStateFlow()
@@ -55,7 +66,7 @@ class ConsentProvider constructor(
     }
 
     override fun init(app: Application) {
-        Timber.d("ConsentProvider: Initializing consent service")
+        Timber.d("$TAG Initializing consent service")
         // This sample attempts to load ads using consent obtained in the previous session.
         if (googleMobileAdsConsentManager.canRequestAds) {
             initializeMobileAdsSdk()
@@ -133,5 +144,9 @@ class ConsentProvider constructor(
                 _isAdInitialized.value = true
             }
         }
+    }
+
+    private companion object {
+        const val TAG = "ConsentProvider"
     }
 }

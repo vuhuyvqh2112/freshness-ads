@@ -28,18 +28,23 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.lang.ref.WeakReference
 import java.util.concurrent.atomic.AtomicBoolean
 
-class AdsManagerProvider constructor(
+internal class AdsManagerProvider(
     override val interAdService: InterAdService,
     override val openAdService: OpenAdService,
     private val _bannerAdService: AdsBannerService,
     private val _nativeAdService: NativeAdService,
     private val _adPoolManager: AdPoolManager,
     override val rewardAdService: RewardAdService,
+    override val rewardedInterAdService: RewardAdService,
     private val consentService: ConsentService,
     private val remoteConfigService: RemoteConfigService,
     private val adUnitCatalog: AdUnitCatalog,
@@ -51,6 +56,14 @@ class AdsManagerProvider constructor(
 ) : AdsManagerService, LifecycleEventObserver {
 
     private val scope = CoroutineScope(mainDispatcher + SupervisorJob())
+
+    override val isFullScreenAdShowing: StateFlow<Boolean> = combine(
+        interAdService.isShowing,
+        rewardAdService.isShowing,
+        rewardedInterAdService.isShowing,
+        openAdService.isOpenAdShowing,
+    ) { inter, reward, rewardedInter, open -> inter || reward || rewardedInter || open }
+        .stateIn(scope, SharingStarted.Eagerly, false)
 
     private val _shouldShowForegroundAd = AtomicBoolean(false)
     private var _skipOpenAd = false
@@ -73,8 +86,7 @@ class AdsManagerProvider constructor(
         lastInterShownAt = SystemClock.elapsedRealtime()
     }
 
-    /** Reset the inter frequency cap — e.g. after user finishes a long flow. */
-    fun resetInterTimer() {
+    override fun resetInterTimer() {
         lastInterShownAt = 0L
     }
 
@@ -128,35 +140,42 @@ class AdsManagerProvider constructor(
         interAdService.loadAd(config)
     }
 
-    override suspend fun showInterAd(
+    override suspend fun showInterAdOutcome(
         config: InterAdConfig,
         placement: String?,
         onShow: () -> Unit
-    ): Boolean {
-        if (!adsDataStore.isAdEnabled) return false
-        if (!consentService.canRequestAds) return false
-        if (placement != null && !isAdEnabled(placement)) {
-            Timber.d("AdsManager: Inter ad disabled by remote config: $placement")
-            return false
+    ): AdShowOutcome {
+        if (!adsDataStore.isAdEnabled) return AdShowOutcome.DISABLED
+        if (!consentService.canRequestAds) return AdShowOutcome.CONSENT_MISSING
+        val gate = placement ?: config.placement
+        if (!isAdEnabled(gate)) {
+            Timber.d("AdsManager: Inter ad disabled by remote config: $gate")
+            return AdShowOutcome.PLACEMENT_OFF
         }
         if (!canShowInterNow()) {
             Timber.d("AdsManager: Inter frequency cap active, skip ${config.placement}")
-            return false
+            return AdShowOutcome.FREQUENCY_CAP
         }
-        val shown = interAdService.showAd(_topActivity, config, onShow)
-        if (shown) markInterShown()
-        return shown
+        val outcome = interAdService.showAdOutcome(_topActivity, config, onShow)
+        if (outcome.shown) markInterShown()
+        return outcome
     }
 
-    override suspend fun loadAndShowInterAd(
+    override suspend fun loadAndShowInterAdOutcome(
         config: InterAdConfig,
         placement: String?,
         onShow: () -> Unit
-    ): Boolean {
+    ): AdShowOutcome {
+        // Kiểm cap TRƯỚC khi nạp: showInterAd sẽ từ chối ngay khi cap còn hiệu lực, nạp trước đó
+        // chỉ phát một request không bao giờ đổi được impression.
+        if (!canShowInterNow()) {
+            Timber.d("AdsManager: Inter frequency cap active, skip load+show ${config.placement}")
+            return AdShowOutcome.FREQUENCY_CAP
+        }
         // loadAd tự bỏ qua khi đã có ad trong cache hoặc job đang chạy, nên gọi thẳng là đủ —
         // không cần kiểm tra trạng thái ở đây rồi lệch với logic bên trong provider.
         loadInterAd(config)
-        return showInterAd(config, placement, onShow)
+        return showInterAdOutcome(config, placement, onShow)
     }
 
     override fun loadRewardAd(config: RewardAdConfig) {
@@ -164,29 +183,61 @@ class AdsManagerProvider constructor(
         rewardAdService.loadAd(config)
     }
 
-    override suspend fun loadAndShowRewardAd(
+    override suspend fun loadAndShowRewardAdOutcome(
         config: RewardAdConfig,
         placement: String?,
         onShow: () -> Unit,
         onReward: (RewardItem) -> Unit
-    ): Boolean {
+    ): AdShowOutcome {
         loadRewardAd(config)
-        return showRewardAd(config, placement, onShow, onReward)
+        return showRewardAdOutcome(config, placement, onShow, onReward)
     }
 
-    override suspend fun showRewardAd(
+    override suspend fun showRewardAdOutcome(
         config: RewardAdConfig,
         placement: String?,
         onShow: () -> Unit,
         onReward: (RewardItem) -> Unit
-    ): Boolean {
-        if (!adsDataStore.isAdEnabled) return false
-        if (!consentService.canRequestAds) return false
-        if (placement != null && !isAdEnabled(placement)) {
-            Timber.d("AdsManager: Reward ad disabled by remote config: $placement")
-            return false
+    ): AdShowOutcome = showRewardedOutcome(rewardAdService, config, placement, onShow, onReward)
+
+    override fun loadRewardedInterAd(config: RewardAdConfig) {
+        if (!consentService.canRequestAds) return
+        rewardedInterAdService.loadAd(config)
+    }
+
+    override suspend fun loadAndShowRewardedInterAdOutcome(
+        config: RewardAdConfig,
+        placement: String?,
+        onShow: () -> Unit,
+        onReward: (RewardItem) -> Unit
+    ): AdShowOutcome {
+        loadRewardedInterAd(config)
+        return showRewardedInterAdOutcome(config, placement, onShow, onReward)
+    }
+
+    override suspend fun showRewardedInterAdOutcome(
+        config: RewardAdConfig,
+        placement: String?,
+        onShow: () -> Unit,
+        onReward: (RewardItem) -> Unit
+    ): AdShowOutcome = showRewardedOutcome(rewardedInterAdService, config, placement, onShow, onReward)
+
+    /** Gate chung cho hai format có thưởng: master gate, consent, công tắc placement. */
+    private suspend fun showRewardedOutcome(
+        service: RewardAdService,
+        config: RewardAdConfig,
+        placement: String?,
+        onShow: () -> Unit,
+        onReward: (RewardItem) -> Unit
+    ): AdShowOutcome {
+        if (!adsDataStore.isAdEnabled) return AdShowOutcome.DISABLED
+        if (!consentService.canRequestAds) return AdShowOutcome.CONSENT_MISSING
+        val gate = placement ?: config.placement
+        if (!isAdEnabled(gate)) {
+            Timber.d("AdsManager: Rewarded ad disabled by remote config: $gate")
+            return AdShowOutcome.PLACEMENT_OFF
         }
-        return rewardAdService.showAd(_topActivity, config, onShow = onShow, onReward = onReward)
+        return service.showAdOutcome(_topActivity, config, onShow = onShow, onReward = onReward)
     }
 
     override fun loadOpenAd() {
@@ -282,7 +333,9 @@ class AdsManagerProvider constructor(
             && !isSplash
             && !interAdService.isShowing.value
             && !rewardAdService.isShowing.value
+            && !rewardedInterAdService.isShowing.value
             && !_skipOpenAd
+            && !openAdService.isExcluded(_topActivity.get())
             && consentService.canRequestAds
         ) {
             val listener = onShowOpenAdListener
@@ -305,6 +358,7 @@ class AdsManagerProvider constructor(
         nativeAdService.reset()
         _bannerAdService.reset()
         rewardAdService.reset()
+        rewardedInterAdService.reset()
     }
 
     override val isPrivacyOptionsRequired: Boolean

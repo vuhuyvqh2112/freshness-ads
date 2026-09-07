@@ -39,7 +39,7 @@
   th { background: #eef4f6; font-weight: 600; }
   .lead { font-size: 11pt; color: #45525c; margin: 0 0 4pt; }
   .meta { font-size: 8.5pt; color: #6b7780; margin-bottom: 16pt; }
-  .box {
+  .box, .warn, .danger, .note, .new {
     border-radius: 4px; padding: 7pt 10pt; margin: 8pt 0; font-size: 9.5pt;
     page-break-inside: avoid;
   }
@@ -47,7 +47,8 @@
   .danger { background: #fff0f0; border-left: 3px solid #c92a2a; }
   .note { background: #e7f5f8; border-left: 3px solid #0b7285; }
   .new { background: #ebfbee; border-left: 3px solid #2f9e44; }
-  .box strong { display: block; margin-bottom: 2pt; }
+  .box > strong:first-child, .warn > strong:first-child, .danger > strong:first-child,
+  .note > strong:first-child, .new > strong:first-child { display: block; margin-bottom: 2pt; }
   .toc { background: #f6f8fa; border: 1px solid #dde3e8; border-radius: 4px; padding: 8pt 12pt; }
   .toc ol { margin: 0 0 0 14pt; font-size: 9.5pt; }
   .page-break { page-break-before: always; }
@@ -64,7 +65,7 @@
 
 <h1>Freshness Ads</h1>
 <p class="lead">SDK quảng cáo AdMob cho Android — waterfall theo tier, native pool, consent UMP, cấu hình bằng Remote Config.</p>
-<p class="meta">Phiên bản 1.0.6 · Google Mobile Ads Next-Gen SDK 1.2.1 · minSdk 26 · Hướng dẫn sử dụng</p>
+<p class="meta">Phiên bản 1.1.0 · Google Mobile Ads Next-Gen SDK 1.2.1 · minSdk 26 · Hướng dẫn sử dụng</p>
 
 <div class="toc">
 <strong>Nội dung</strong>
@@ -83,6 +84,8 @@
   <li>Rewarded</li>
   <li>App-open</li>
   <li>Remote Config</li>
+  <li>Sự kiện và doanh thu quảng cáo</li>
+  <li>Jetpack Compose</li>
   <li>ProGuard / R8</li>
   <li>Mediation Unity Ads</li>
   <li>Test và debug</li>
@@ -122,21 +125,24 @@
 
 <p>Trong <code>app/build.gradle.kts</code>:</p>
 <pre><code>dependencies {
-    implementation("com.github.vuhuyvqh2112:freshness-ads:1.0.6")
+    implementation("com.github.vuhuyvqh2112:freshness-ads:1.1.0")
 }</code></pre>
+
+<p>App dùng Jetpack Compose thêm module wrapper (kéo theo SDK chính, không phải khai cả hai) <span class="tag">1.1.0+</span>:</p>
+<pre><code>implementation("com.github.vuhuyvqh2112:freshness-ads-compose:1.1.0")</code></pre>
 
 <p>Không cần khai thêm GMA SDK, UMP, Unity adapter hay Firebase Config — POM của SDK đã mang theo hết. Từ 1.0.1, <code>androidx.lifecycle</code> cũng đi kèm (khai <code>api</code>) vì <code>bindNativeAdFromCache</code> là extension trên <code>LifecycleOwner</code>.</p>
 
-<p>Phần khung androidx còn lại (<code>appcompat</code>, <code>material</code>, coroutines) app tự khai như bình thường — SDK khai chúng bằng <code>implementation</code> nên không rò sang app.</p>
+<p>Phần khung androidx còn lại (<code>appcompat</code>, <code>material</code>, coroutines) SDK khai bằng <code>implementation</code>: chúng vẫn nằm trong runtime classpath của app nhưng không lộ ra API, nên app muốn gọi trực tiếp thì tự khai như bình thường.</p>
 
-<h3>2.2 Firebase</h3>
+<h3>2.2 Firebase <span class="tag">tuỳ chọn từ 1.1.0</span></h3>
 
-<p>SDK đọc Remote Config và ghi non-fatal vào Crashlytics, nên app <strong>bắt buộc</strong> phải có Firebase:</p>
+<p>Có Firebase thì id và setting ghi đè được bằng Remote Config (mục 14); không có thì SDK chạy bằng <code>assets/ads_id_config.json</code> và ghi một dòng cảnh báo lúc khởi động. Muốn dùng Remote Config:</p>
 
-<pre><code>// build.gradle.kts (root)
+<pre><code>// build.gradle.kts (root) — lấy version mới nhất trên Google Maven
 plugins {
-    id("com.google.gms.google-services") version "4.4.4" apply false
-    id("com.google.firebase.crashlytics") version "3.0.6" apply false
+    id("com.google.gms.google-services") apply false
+    id("com.google.firebase.crashlytics") apply false   // tuỳ chọn
 }
 
 // app/build.gradle.kts
@@ -147,9 +153,9 @@ plugins {
 
 <p>Đặt <code>google-services.json</code> vào thư mục <code>app/</code>.</p>
 
-<div class="danger">
-<strong>Thiếu plugin Crashlytics là crash ngay lúc khởi động.</strong>
-<code>firebase-crashlytics</code> là eager component: nó khởi tạo bên trong <code>FirebaseApp.initializeApp</code> và ném <code>IllegalStateException: The Crashlytics build ID is missing</code> nếu plugin Gradle chưa được áp. Không phải "thiếu thì mất báo cáo lỗi" — là app không mở được. Hai plugin ở trên đều bắt buộc, không phải tuỳ chọn.
+<div class="note">
+<strong>Crashlytics không còn bắt buộc.</strong>
+Từ 1.1.0 SDK khai <code>firebase-crashlytics</code> bằng <code>compileOnly</code>: app có Crashlytics thì crash nội bộ của UMP được ghi non-fatal, không có thì chỉ còn dòng log. Trước 1.1.0 thiếu plugin Crashlytics là app crash ngay lúc khởi động (<code>The Crashlytics build ID is missing</code>) — nâng lên 1.1.0 là hết.
 </div>
 
 <h3>2.3 AdMob app id trong manifest</h3>
@@ -178,15 +184,18 @@ App id có dấu <code>~</code>, ad unit id có dấu <code>/</code>. Điền nh
   "settings": {
     "splashTimeoutMs": 30000,
     "interMinIntervalMs": 20000,
-    "rewardTimeoutMs": 20000
+    "rewardTimeoutMs": 20000,
+    "free_episodes_count": 3
   },
   "placements": {
     "inter_splash": {
       "format": "interstitial",
       "enable": true,
+      "hf": false,
       "ids": [
-        { "id": "ca-app-pub-xxx/high-floor", "enable": true },
-        { "id": "ca-app-pub-xxx/all-price",  "enable": true }
+        "ca-app-pub-xxx/high-floor",
+        { "id": "ca-app-pub-xxx/mid", "enable": false },
+        "ca-app-pub-xxx/all-price"
       ]
     },
     "native_home": {
@@ -206,10 +215,12 @@ App id có dấu <code>~</code>, ad unit id có dấu <code>/</code>. Điền nh
 <tr><th>Trường</th><th>Ý nghĩa</th></tr>
 <tr><td><code>enableAllAds</code></td><td>Công tắc tổng. <code>false</code> là tắt sạch mọi format.</td></tr>
 <tr><td><code>placements.&lt;key&gt;</code></td><td>Tên chỗ đặt ad. <strong>Do bạn tự đặt</strong> — SDK không ép danh sách nào.</td></tr>
-<tr><td><code>format</code></td><td><code>banner</code> · <code>native</code> · <code>interstitial</code> · <code>rewarded</code> · <code>appOpen</code>. Quyết định test id dùng ở debug build.</td></tr>
+<tr><td><code>format</code></td><td><code>banner</code> · <code>native</code> · <code>interstitial</code> · <code>rewarded</code> · <code>rewardedInter</code> <span class="tag">1.1.0+</span> · <code>appOpen</code>. Quyết định test id dùng ở debug build.</td></tr>
 <tr><td><code>enable</code> (placement)</td><td><code>false</code> = tắt cả chỗ đặt ad này.</td></tr>
-<tr><td><code>ids</code></td><td>Thứ tự waterfall. Id đầu thử trước; fail mới xuống id kế. Tầng high-floor chèn vào <strong>đầu</strong> mảng.</td></tr>
+<tr><td><code>ids</code></td><td>Thứ tự waterfall. Id đầu thử trước; fail mới xuống id kế. Quy ước: id <strong>cuối</strong> là all-price, mọi id trước nó là high-floor. Mỗi phần tử viết được dạng chuỗi <code>"ca-app-pub…"</code> hoặc object <code>{ "id", "enable" }</code> <span class="tag">1.1.0+</span>.</td></tr>
 <tr><td><code>enable</code> (id)</td><td><code>false</code> = tắt riêng một tầng, giữ nguyên các tầng khác.</td></tr>
+<tr><td><code>hf</code> <span class="tag">1.1.0+</span></td><td><code>false</code> = tắt cả tầng high-floor, chỉ chạy id cuối. Thiếu hoặc <code>true</code> = dùng hết <code>ids</code>. Một công tắc để ops bật HF khi có inventory, không phải sửa từng id.</td></tr>
+<tr><td><code>settings.&lt;key&gt;</code> <span class="tag">1.1.0+</span></td><td>Key tuỳ ý của app (số, boolean, chuỗi). Đọc bằng <code>ads.remoteConfig.long("key", default)</code> / <code>bool</code> / <code>string</code> — xem mục 14.</td></tr>
 <tr><td><code>baseMs</code> / <code>tierCapMs</code> / <code>ceilingMs</code></td><td>Ghi đè ngân sách thời gian mặc định của format. Bỏ trống là dùng mặc định.</td></tr>
 </table>
 
@@ -261,7 +272,14 @@ Key không có ở cả Remote Config lẫn file assets sẽ resolve ra rỗng, 
 
 <h3>Nối với IAP</h3>
 
-<p>Mặc định chỉ <code>enableAllAds</code> quyết định bật/tắt. App có mua-gói-bỏ-quảng-cáo thì truyền <code>AdsDataStore</code> riêng:</p>
+<p>App có mua-gói-bỏ-quảng-cáo thì truyền một lambda; SDK đọc lại mỗi lần kiểm tra nên mua xong là tắt ads ngay, không cần gọi gì thêm:</p>
+
+<pre><code>AdsConfig(
+    /* ... */
+    isPremium = { billing.hasRemoveAds },
+)</code></pre>
+
+<p>Cần logic phức tạp hơn (thêm cờ riêng của app, A/B test…) thì truyền hẳn <code>AdsDataStore</code> vào <code>install</code>; khi đó <code>isPremium</code> không được đọc:</p>
 
 <pre><code>AdsGraph.install(
     application = this,
@@ -291,10 +309,10 @@ Mục đích là cho ngón tay đang bấm kịp dừng lại trước khi quả
 
 <table>
 <tr><th>Muốn gì</th><th>Làm sao</th></tr>
-<tr><td>Đổi thời gian chờ tối thiểu</td><td><code>InterAdConfig(minLoadingMs = 800L)</code> / <code>RewardAdConfig(minLoadingMs = 800L)</code>. Đặt <code>0</code> để tắt hẳn khoảng chờ.</td></tr>
+<tr><td>Đổi thời gian chờ tối thiểu</td><td><code>InterAdConfig(minLoadingMs = 800L)</code> / <code>RewardAdConfig(minLoadingMs = 800L)</code>. <code>0</code> = bung ngay khi có ad, nhưng màn chờ vẫn loé một frame — muốn không thấy gì thì dùng <code>isShowLoading = false</code> ở dòng dưới.</td></tr>
 <tr><td>Đổi màu</td><td>Khai lại đúng tên trong <code>res/values/colors.xml</code> của app: <code>ads_loading_background</code>, <code>ads_loading_spinner</code>.</td></tr>
 <tr><td>Tự vẽ giao diện riêng</td><td><code>AdsConfig(showDefaultLoadingUi = false)</code> rồi observe <code>AdsGraph.adLoading.isLoading</code>.</td></tr>
-<tr><td>Tắt màn chờ ở một chỗ</td><td><code>isShowLoading = false</code> trong config của format đó.</td></tr>
+<tr><td>Tắt màn chờ ở một chỗ</td><td><code>isShowLoading = false</code> trong config của format đó. Tắt là tắt <strong>cả khoảng chờ tối thiểu</strong>: màn hình đó phải tự giữ khoảng chờ bằng loading riêng của mình.</td></tr>
 </table>
 
 <pre><code>&lt;!-- Ghi đè màu, đặt trong res/values/colors.xml của app --&gt;
@@ -312,6 +330,11 @@ Tắt <code>showDefaultLoadingUi</code> để dùng giao diện riêng là hợp
 
 <p><code>launchSplashAdFlow</code> làm trọn gói: gom consent (có timeout), rồi hiện interstitial splash nếu placement đó đang bật.</p>
 
+<div class="warn">
+<strong>Splash: tắt màn chờ của SDK.</strong>
+Splash đã là màn chờ rồi. Để <code>isShowLoading</code> mặc định là màn chờ trắng của SDK phủ lên splash của app suốt lúc chờ fill (tới 30 giây). Đặt <code>isShowLoading = false</code> trong config của splash như dưới đây.
+</div>
+
 <pre><code>class SplashActivity : AppCompatActivity() {
 
     private val ads get() = AdsGraph.adsManager
@@ -320,6 +343,8 @@ Tắt <code>showDefaultLoadingUi</code> để dùng giao diện riêng là hợp
         placement = "inter_splash",
         reload = false,
         timeOut = 30_000L,
+        // Splash tự là màn chờ, không để SDK phủ thêm một lớp trắng lên nó
+        isShowLoading = false,
         // Một lần một unit, không retry: waterfall tuần tự nhanh hơn. Retry làm id
         // chính fill muộn, tới lúc đó user đã rời splash — matched nhưng không show.
         retryCount = 1,
@@ -356,11 +381,11 @@ Policy của Google yêu cầu app có lối vào để đổi/rút lại consen
 <table>
 <tr><th>Format</th><th>Chờ tối đa</th><th>Vì sao</th></tr>
 <tr><td>Banner, Native</td><td><strong>60 giây</strong></td><td>Bị động, không ai đang chờ. Hiện muộn vẫn hơn không hiện — và không có gì kích hoạt lại lệnh load khi user vẫn ngồi trên màn hình.</td></tr>
-<tr><td>Interstitial, Rewarded</td><td>15 giây</td><td>Có người dùng đang chờ sau spinner. Thà bỏ quảng cáo còn hơn giữ họ lâu hơn.</td></tr>
+<tr><td>Interstitial, Rewarded</td><td>15 giây</td><td>Có người dùng đang chờ sau spinner. Thà bỏ quảng cáo còn hơn giữ họ lâu hơn. Đây là ngưỡng chờ <em>init</em> cố định; thời gian spinner thật sự hiện do <code>timeOut</code> của config quyết định (inter mặc định 6 giây), và tăng <code>timeOut</code> không kéo dài được ngưỡng init này.</td></tr>
 <tr><td>App-open</td><td>15 giây</td><td>Hiện muộn 30 giây sau khi user đã vào app thì vô nghĩa.</td></tr>
 </table>
 
-<p>Thấy <code>SKIP … (SDK not ready)</code> trong logcat ngay trước dòng <code>MobileAds (next-gen) initialized</code> nghĩa là init chạy quá lâu — xem mục 16, gần như luôn là do thiếu mediation group.</p>
+<p>Thấy <code>SKIP … (SDK not ready)</code> trong logcat ngay trước dòng <code>MobileAds (next-gen) initialized</code> nghĩa là init chạy quá lâu — xem mục 18, gần như luôn là do thiếu mediation group.</p>
 
 <div class="page-break"></div>
 
@@ -398,6 +423,35 @@ lifecycleScope.launch {
 <p><code>showInterAd</code> và <code>loadAndShowInterAd</code> đều trả về sau khi user đóng ad, và trả <code>false</code> nếu không có gì để hiện. Luôn đi tiếp bất kể kết quả — đừng chặn điều hướng vì một quảng cáo không fill.</p>
 
 <p>SDK tự áp <strong>frequency cap</strong> giữa hai interstitial bất kỳ (mặc định 20s, chỉnh bằng <code>settings.interMinIntervalMs</code>). Bấm nhanh qua nhiều màn sẽ không ăn liên tiếp hai quảng cáo toàn màn.</p>
+
+<h3>Vì sao không hiện: <code>AdShowOutcome</code> <span class="tag">1.1.0+</span></h3>
+
+<p>Bản <code>…Outcome</code> của mọi lệnh show trả lời lý do thay vì một <code>false</code> câm — để log, A/B, hoặc quyết định có chờ thêm không:</p>
+
+<pre><code>when (val outcome = ads.showInterAdOutcome(interConfig)) {
+    AdShowOutcome.SHOWN -> analytics.log("inter_shown")
+    AdShowOutcome.FREQUENCY_CAP,
+    AdShowOutcome.PLACEMENT_OFF -> Unit          // bình thường, đi tiếp
+    AdShowOutcome.NO_FILL -> analytics.log("inter_no_fill")
+    else -> Timber.w("inter: $outcome")
+}</code></pre>
+
+<table>
+<tr><th>Giá trị</th><th>Nghĩa</th></tr>
+<tr><td><code>SHOWN</code></td><td>Đã hiện và người dùng đã đóng.</td></tr>
+<tr><td><code>DISABLED</code></td><td>Premium hoặc <code>enableAllAds = false</code>.</td></tr>
+<tr><td><code>PLACEMENT_OFF</code></td><td>Placement tắt hoặc không có id trong <code>ads_id_config</code>.</td></tr>
+<tr><td><code>CONSENT_MISSING</code></td><td>Người dùng EEA chưa đồng ý consent.</td></tr>
+<tr><td><code>FREQUENCY_CAP</code></td><td>Chưa đủ khoảng cách tối thiểu giữa hai interstitial.</td></tr>
+<tr><td><code>ALREADY_SHOWING</code></td><td>Đang có ad toàn màn khác, hoặc một lần show cùng placement đang chạy.</td></tr>
+<tr><td><code>NO_FILL</code></td><td>Hết <code>timeOut</code> mà không có ad.</td></tr>
+<tr><td><code>NO_ACTIVITY</code> / <code>SHOW_FAILED</code></td><td>Không còn activity, hoặc <code>show()</code> hỏng (ad hết hạn, activity đang finish).</td></tr>
+</table>
+
+<div class="note">
+<strong>Ad đã nạp có hạn dùng 1 giờ <span class="tag">1.1.0+</span>.</strong>
+AdMob coi interstitial/rewarded là hết hạn sau khoảng một giờ; đem ad cũ đi show là <code>SHOW_FAILED</code> và người dùng nhìn spinner vô ích. SDK tự bỏ ad quá hạn và nạp lại — preload ở màn đầu rồi để user đi lâu vẫn an toàn.
+</div>
 
 <h2>8. Native — một slot</h2>
 
@@ -452,6 +506,55 @@ Từ 1.0.5 SDK giữ sàn 120dp nên không còn vi phạm, nhưng vẫn nên kh
 <code>placement</code> quyết định <em>load id nào</em> (key trong <code>ads_id_config</code>).<br>
 <code>key</code> định danh <em>chỗ hiển thị</em> trong cache. Hai màn dùng chung một placement vẫn phải có key riêng, nếu không màn thứ hai sẽ bind đúng cái ad màn thứ nhất đang giữ.
 </div>
+
+<h3>Tuỳ chọn native: tiếng video, tỉ lệ media, AdChoices <span class="tag">1.1.0+</span></h3>
+
+<p>Mặc định toàn cục đặt trong <code>AdsConfig(nativeAdOptions = NativeAdOptions(...))</code>, từng placement ghi đè trong <code>ads_id_config</code>:</p>
+
+<pre><code>// AdsConfig — mặc định cho mọi placement
+nativeAdOptions = NativeAdOptions(
+    videoMuted = true,                      // mặc định: video native KHÔNG tự phát tiếng
+    mediaAspectRatio = NativeMediaAspectRatio.ANY,
+    adChoicesPlacement = AdChoicesCorner.TOP_RIGHT,
+)
+
+// ads_id_config — riêng một placement
+"native_home": { "mediaAspectRatio": "landscape", "adChoicesPlacement": "bottom_left" }</code></pre>
+
+<p>Chọn <code>mediaAspectRatio</code> khớp với template đang dùng (<code>HomeView</code>/<code>DisplayView</code> là landscape) để Google trả creative đúng tỉ lệ, ảnh không bị cắt.</p>
+
+<h3>Nạp lại slot sau click và sau video <span class="tag">1.1.0+</span></h3>
+
+<p>Với slot đơn (<code>bindNativeAdFromCache</code>), SDK tự thay ad mới vào cùng chỗ khi người dùng bấm vào ad rồi quay lại app, và khi video của native chạy hết. Ad cũ đã tạo click / đã xem xong; ad mới là thêm một impression cho cùng chỗ đặt, không tốn thêm UI. Slot giữ nguyên ad cũ cho tới khi ad mới về (không nháy shimmer), no-fill thì giữ ad cũ.</p>
+
+<p>Tắt bằng <code>AdsConfig(nativeRefill = false)</code> hoặc Remote Config <code>settings.nativeRefill = false</code>. Pool cho danh sách (mục 9) không áp: pool đã tự nạp theo impression.</p>
+
+<h3>Template từ layout XML của app <span class="tag">1.1.0+</span></h3>
+
+<p>Không cần subclass hai class cho mỗi thiết kế nữa. Vẽ layout với root là <code>NativeAdView</code> id <code>native_ad_view</code> và các id quy ước — đây cũng là id 13 template có sẵn của SDK đang dùng, nên copy XML của SDK ra sửa là chạy:</p>
+
+<table>
+<tr><th>Id</th><th>View</th><th></th></tr>
+<tr><td><code>native_ad_view</code></td><td><code>NativeAdView</code> (root)</td><td>bắt buộc</td></tr>
+<tr><td><code>media_view</code></td><td><code>MediaView</code></td><td rowspan="8">tuỳ chọn — thiếu id nào thì asset đó không hiển thị</td></tr>
+<tr><td><code>icon</code></td><td><code>ImageView</code></td></tr>
+<tr><td><code>primary</code> / <code>body</code> / <code>cta</code> / <code>advertiser</code> / <code>price</code></td><td><code>TextView</code></td></tr>
+<tr><td><code>rating_bar</code></td><td><code>AppCompatRatingBar</code></td></tr>
+<tr><td><code>rate_price_container</code></td><td>View bọc rating + price, ẩn khi cả hai trống</td></tr>
+</table>
+
+<pre><code>&lt;!-- XML: shimmer mặc định của SDK, hoặc app:adShimmerLayout riêng --&gt;
+&lt;com.freshness.ads.natives.LoadingNativeAdTemplateView
+    android:id="@+id/nativeAd"
+    android:layout_width="match_parent"
+    android:layout_height="240dp"
+    app:adLayout="@layout/my_native_card" /&gt;
+
+// Code
+val view = LoadingNativeAdTemplateView(context, R.layout.my_native_card)
+
+// Bind y hệt các template có sẵn
+bindNativeAdFromCache(binding.nativeAd, ads.nativeAdService, "native_detail", releaseOnDestroy = true)</code></pre>
 
 <h3>Preload sớm một màn</h3>
 
@@ -545,7 +648,7 @@ Nút đóng phải hiện, và BACK phải chạy được. Muốn giữ impress
     context = this,
     bannerView = binding.bannerContainer,
     placement = "banner_home",
-    isCollapsible = false,
+    size = BannerSize.ANCHORED,   // mặc định; INLINE cho feed cuộn, MREC 300×250
     onLoadSuccess = { binding.bannerContainer.isVisible = true },
     onLoadFail = { binding.bannerContainer.isVisible = false },
 )</code></pre>
@@ -555,7 +658,14 @@ Nút đóng phải hiện, và BACK phải chạy được. Muốn giữ impress
 Từ 1.0.1 banner dùng <em>large</em> anchored adaptive — bản Google thay cho API cũ đã deprecated. Nó <strong>cao hơn</strong> anchored thường. Container nào khoá <code>layout_height</code> cứng sẽ cắt mất quảng cáo.
 </div>
 
-<p><code>isCollapsible = true</code> cho banner thu gọn được (user bấm mũi tên để xếp lại). Chỉ dùng ở banner neo đáy, và đừng dùng ở màn mà user quay lại liên tục — banner collapsible bung ra mỗi lần load là gây khó chịu.</p>
+<table>
+<tr><th><code>BannerSize</code> <span class="tag">1.1.0+</span></th><th>Dùng khi</th></tr>
+<tr><td><code>ANCHORED</code></td><td>Neo đỉnh/đáy màn. Bản <em>large</em> anchored adaptive, hành vi từ 1.0.1.</td></tr>
+<tr><td><code>INLINE</code></td><td>Nằm trong nội dung cuộn (feed, giữa bài). Google trả chiều cao theo creative nên cao hơn anchored — container vẫn <code>wrap_content</code>.</td></tr>
+<tr><td><code>MREC</code></td><td>300×250dp cố định, cho chỗ đặt dạng thẻ.</td></tr>
+</table>
+
+<p>Tham số <code>isCollapsible</code> ở bản cũ <strong>chưa bao giờ có tác dụng</strong>: GMA next-gen 1.2.1 không có API collapsible banner. Từ 1.1.0 nó bị đánh dấu deprecated, call site cũ vẫn compile và vẫn nạp anchored banner thường.</p>
 
 <div class="page-break"></div>
 
@@ -595,6 +705,18 @@ Hàm chỉ trả về <em>sau khi</em> user đóng quảng cáo. Call site nào 
 
 <p>Và: hỏi quyền / kiểm điều kiện <strong>trước</strong> khi mở quảng cáo. Bắt user xem hết video rồi mới báo "thiếu quyền" là lừa họ bỏ công lấy một thứ không nhận được.</p>
 
+<h3>Rewarded interstitial <span class="tag">1.1.0+</span></h3>
+
+<p>Format "xem để nhận thưởng" nhưng hiện ở điểm chuyển màn tự nhiên, không cần người dùng bấm. Cùng <code>RewardAdConfig</code> và cùng hành vi với rewarded (nạp-rồi-hiện, màn chờ, hạn dùng, callback), chỉ khác placement khai <code>"format": "rewardedInter"</code>:</p>
+
+<pre><code>lifecycleScope.launch {
+    ads.loadAndShowRewardedInterAd("reward_inter_level_end", onReward = { grantBonus() })
+    goToNextLevel()
+}
+// Preload / bản Outcome: loadRewardedInterAd, showRewardedInterAdOutcome, loadAndShowRewardedInterAdOutcome</code></pre>
+
+<div class="page-break"></div>
+
 <h2>13. App-open</h2>
 
 <p>App-open ad hiện khi user quay lại app từ background. SDK tự theo dõi vòng đời process; app chỉ cần cung cấp một Activity đục để che nội dung:</p>
@@ -620,6 +742,15 @@ class OpenAdActivity : AppCompatActivity() {
 <p>Tạm tắt app-open cho một lần quay lại (ví dụ user vừa đi ra ngoài chọn ảnh rồi quay vào):</p>
 <pre><code>ads.setSkipOpenAd(true)</code></pre>
 
+<p>Màn nào <strong>không bao giờ</strong> muốn app-open đè lên (thanh toán, chọn file, activity quảng cáo của SDK khác) thì khai một lần thay vì nhớ gọi <code>setSkipOpenAd</code> mỗi chỗ <span class="tag">1.1.0+</span>:</p>
+<pre><code>// AdsConfig
+openAdExcludedActivities = setOf(BillingActivity::class.java, FilePickerActivity::class.java)
+
+// hoặc lúc chạy
+ads.openAdService.excludeActivity(SomeActivity::class.java)</code></pre>
+
+<p>Cần pause video/nhạc trong lúc bất kỳ ad toàn màn nào đang hiện thì observe một cờ gộp thay vì ba: <code>ads.isFullScreenAdShowing</code> <span class="tag">1.1.0+</span>. <code>Activity.onPause</code> không đủ vì màn kế tiếp có thể được dựng ngay dưới quảng cáo.</p>
+
 <div class="warn">
 <strong>Bắt buộc: che nội dung app.</strong>
 Policy AdMob không cho user thấy nội dung app phía sau app-open ad. Không có Activity che là vi phạm.
@@ -629,13 +760,32 @@ Policy AdMob không cho user thấy nội dung app phía sau app-open ad. Không
 
 <p>SDK đọc <strong>đúng một</strong> key Firebase Remote Config: <code>ads_id_config</code>. Giá trị là toàn bộ JSON ở mục 3.</p>
 
-<p>Ghi đè theo <strong>từng placement</strong>: key nào có trên Remote Config thì bản đó thắng trọn vẹn, key nào thiếu thì rơi về file assets. Nhờ vậy đẩy lên RC một placement duy nhất là chỉnh được riêng nó.</p>
+<p>Ghi đè theo <strong>từng field của từng placement</strong> <span class="tag">1.1.0+</span>: payload trên Remote Config chỉ cần mang phần thay đổi, field nào không nhắc tới giữ giá trị trong file assets. <code>ids</code> có mặt thì thay cả danh sách. Trước 1.1.0 một placement có trên RC là thay trọn, thiếu <code>ids</code> là mất id.</p>
 
-<pre><code>// Đọc settings
+<pre><code>// Tắt một chỗ đặt ad — không cần paste lại ids
+{ "placements": { "native_home": { "enable": false } } }
+
+// Bật tầng high-floor cho splash khi đã có inventory
+{ "placements": { "inter_splash": { "hf": true } } }
+
+// Đổi id — chỉ placement này, các placement khác giữ nguyên asset
+{ "placements": { "banner_home": { "ids": ["ca-app-pub-xxx/new"] } } }</code></pre>
+
+<h3>Key riêng của app trong <code>settings</code> <span class="tag">1.1.0+</span></h3>
+
+<p>Mọi key app đặt trong <code>settings</code> đi cùng một lần fetch với id quảng cáo — không phải tự gọi Firebase, và không lệch khoảng fetch/throttle với SDK. Key trên RC ghi đè theo từng key, key thiếu giữ của asset.</p>
+
+<pre><code>// Setting SDK tự dùng vẫn có field riêng
 val timeout = ads.remoteConfig.splashTimeoutMs ?: 30_000L
+
+// Key của app: getter có kiểu, thiếu hoặc sai kiểu thì ra default
+val freeEpisodes = ads.remoteConfig.long("free_episodes_count", 3L)
+val rateOnExit = ads.remoteConfig.bool("rate_on_exit", false)
 
 // Kiểm công tắc một chỗ đặt ad
 if (ads.isAdEnabled("native_home")) { /* ... */ }</code></pre>
+
+<p>Kiểm tra catalog đang có hiệu lực (asset đã được RC ghi đè): debug build tự in sau mỗi lần nạp RC, hoặc gọi <code>AdsGraph.adUnitCatalog.describe()</code>. Mỗi placement một dòng kèm nguồn (<code>asset</code>, <code>remote</code>, <code>asset+remote</code>) và id nào đang bị tắt.</p>
 
 <div class="note">
 <strong>Payload hỏng không làm mất ads.</strong>
@@ -644,7 +794,63 @@ JSON rỗng, null hoặc parse lỗi đều bị bỏ qua và catalog giữ nguy
 
 <div class="page-break"></div>
 
-<h2>15. ProGuard / R8</h2>
+<h2>15. Sự kiện và doanh thu quảng cáo <span class="tag">1.1.0+</span></h2>
+
+<p>Mọi sự kiện của mọi format đi qua một listener, chạy trên main thread. Sự kiện quan trọng nhất là <code>onAdPaid</code>: mỗi impression một lần, kèm <code>AdRevenue</code> (giá trị AdMob ước tính, đơn vị tiền tệ, độ chính xác) — đúng thứ Adjust / AppsFlyer / Firebase cần để tính ROAS.</p>
+
+<pre><code>AdsGraph.addListener(object : AdsListener {
+    override fun onAdPaid(placement: String, format: AdFormat, revenue: AdRevenue) {
+        adjust.trackAdRevenue("admob_sdk", revenue.value, revenue.currencyCode)
+    }
+    override fun onAdImpression(placement: String, format: AdFormat) {
+        analytics.log("ad_impression_$placement")
+    }
+    override fun onAdFailedToLoad(placement: String, format: AdFormat, reason: String?) {
+        Timber.w("no fill $placement: $reason")
+    }
+})</code></pre>
+
+<table>
+<tr><th>Sự kiện</th><th>Khi nào</th></tr>
+<tr><td><code>onAdLoaded</code> / <code>onAdFailedToLoad</code></td><td>Waterfall của placement kết thúc có / không có ad.</td></tr>
+<tr><td><code>onAdShowed</code> / <code>onAdClosed</code> / <code>onAdFailedToShow</code></td><td>Ad toàn màn (inter, reward, app-open).</td></tr>
+<tr><td><code>onAdImpression</code> / <code>onAdClicked</code></td><td>Mọi format.</td></tr>
+<tr><td><code>onAdRewarded</code></td><td>Người dùng nhận thưởng.</td></tr>
+<tr><td><code>onAdPaid</code></td><td>Impression được định giá. Mọi format.</td></tr>
+</table>
+
+<div class="note">
+<strong>Firebase <code>ad_impression</code> tự động.</strong>
+App có Firebase Analytics thì SDK tự gửi sự kiện chuẩn <code>ad_impression</code> (ad_platform, ad_format, ad_unit_name, value, currency) cho mỗi impression có giá — đúng schema GA4 dùng để tính ad revenue. Không có Firebase Analytics thì im lặng. Tắt bằng <code>AdsConfig(logAdImpressionToFirebase = false)</code> nếu app đã tự gửi.
+</div>
+
+<div class="page-break"></div>
+
+<h2>16. Jetpack Compose <span class="tag">1.1.0+</span></h2>
+
+<p>Module <code>freshness-ads-compose</code> bọc ba thứ hay cần trong Compose; interstitial / rewarded / app-open dùng thẳng <code>AdsGraph.adsManager</code> trong <code>LaunchedEffect</code> hoặc <code>rememberCoroutineScope</code> như thường.</p>
+
+<pre><code>// Native: preload + shimmer + bind + ẩn khi no-fill, gỡ ad khi rời composition
+NativeAd(
+    key = "native_detail",
+    placement = "native_detail",
+    template = { LoadingNativeAdHomeView(it) },   // hoặc LoadingNativeAdTemplateView(it, R.layout.my_native)
+    modifier = Modifier.fillMaxWidth().height(240.dp),
+)
+
+// Banner: chiều cao do Google trả, đừng đặt height
+BannerAd("banner_home", Modifier.fillMaxWidth())
+BannerAd("banner_feed", Modifier.fillMaxWidth(), size = BannerSize.INLINE)
+
+// Pause video khi có ad toàn màn
+val adShowing by rememberFullScreenAdShowing()
+LaunchedEffect(adShowing) { player.playWhenReady = !adShowing }</code></pre>
+
+<p><code>NativeAd</code> không compose gì khi thất bại nên feed dùng nó trong <code>LazyColumn</code> sẽ tự khép slot. Mỗi slot một <code>key</code> riêng (cùng placement vẫn phải khác key). Cả hai composable render rỗng trong <code>@Preview</code>.</p>
+
+<div class="page-break"></div>
+
+<h2>17. ProGuard / R8</h2>
 
 <p>Rule của SDK đi kèm trong AAR (<code>consumer-rules.pro</code>), tự áp vào app khi minify. Không phải chép gì.</p>
 
@@ -655,7 +861,7 @@ JSON rỗng, null hoặc parse lỗi đều bị bỏ qua và catalog giữ nguy
 <pre><code>-keep class * extends androidx.room.RoomDatabase { &lt;init&gt;(); }</code></pre>
 </div>
 
-<h2>16. Mediation Unity Ads</h2>
+<h2>18. Mediation Unity Ads</h2>
 
 <p>Adapter Unity đã nằm trong SDK. Không cần khai gì trong manifest, không cần code init — adapter tự nhận cấu hình từ mediation group phía AdMob lúc chạy.</p>
 
@@ -670,17 +876,24 @@ Sửa ở AdMob, đừng nới thời gian chờ. Triệu chứng nhìn giống 
 
 <p>Từ 1.0.1, SDK cũng ghim <code>adquality-sdk</code> ở <code>9.9.0</code>: <code>unity-ads</code> khai phụ thuộc này bằng dải động <code>(,10.0.0)</code>, không ghim thì mỗi lần build có thể ra một version khác mà không ai đổi dòng nào.</p>
 
-<h2>17. Test và debug</h2>
+<h2>19. Test và debug</h2>
 
-<p>Debug build <strong>mặc định ép test id của Google</strong>, bất kể id thật trong config. Nhờ vậy dev không bao giờ vô tình bấm vào quảng cáo thật (dẫn tới khoá tài khoản AdMob).</p>
+<p>Khi <strong>app host</strong> chạy bản debuggable, SDK <strong>ép test id của Google</strong>, bất kể id thật trong config. Nhờ vậy dev không bao giờ vô tình bấm vào quảng cáo thật (dẫn tới khoá tài khoản AdMob).</p>
+
+<div class="new">
+<strong>1.1.0: "debug" là debug của app host.</strong>
+Các bản trước đọc <code>BuildConfig.DEBUG</code> của chính thư viện — mà AAR trên JitPack là bản release, nên trong app host cờ đó luôn false: debug build của app vẫn chạy id thật, và form consent test EEA không bao giờ hiện. Từ 1.1.0 mọi nhánh debug đọc <code>ApplicationInfo.FLAG_DEBUGGABLE</code> của app.
+</div>
 
 <p>Muốn debug dùng id thật + waterfall thật:</p>
-<pre><code>AdsGraph.adUnitCatalog.useRealIds = true</code></pre>
+<pre><code>AdsConfig(useRealIdsInDebug = true)</code></pre>
 
 <p>Bắt buộc phải bật khi cần kiểm hành vi rớt tier: với test id thì tier nào cũng fill, và waterfall không bao giờ rớt xuống tier sau. Release build bỏ qua hoàn toàn cờ này.</p>
 
-<p>Log: SDK dùng Timber và chỉ plant cây log ở build debuggable, nên release không in gì. Lọc theo tag:</p>
-<pre><code>adb logcat -s NativeAds AdPool OpenAdProvider AdsManager AdsInitializer</code></pre>
+<p>Form consent trên máy test: UMP in hashed id của máy ra logcat ở lần chạy đầu, đưa vào <code>AdsConfig(consentTestDeviceIds = listOf("…"))</code>. Debug build mặc định ép geography EEA để form hiện; tắt bằng <code>consentDebugGeographyEea = false</code>.</p>
+
+<p>Log: SDK dùng Timber và plant cây log khi app debuggable, hoặc khi Remote Config đặt <code>settings.enableLogForTester = true</code> <span class="tag">1.1.0+</span> — tester đọc được log trên bản release mà không cần build riêng. Tag là tên class, lọc bằng grep:</p>
+<pre><code>adb logcat | grep -E "InterAdProvider|RewardAdProvider|OpenAdProvider|NativeAdmobManager|AdPoolManager|AdBannerProvider|ConsentProvider|AdsManagerProvider|RemoteConfig"</code></pre>
 
 <h3>AdMob native ad validator</h3>
 
@@ -706,7 +919,7 @@ Sửa ở AdMob, đừng nới thời gian chờ. Triệu chứng nhìn giống 
 
 <div class="page-break"></div>
 
-<h2>18. Những lỗi làm tụt show rate</h2>
+<h2>20. Những lỗi làm tụt show rate</h2>
 
 <p>Show rate = impression ÷ matched request. Con số thấp nghĩa là bạn xin ad về rồi không dùng — và AdMob nhìn thấy điều đó.</p>
 
@@ -753,7 +966,7 @@ Sửa ở AdMob, đừng nới thời gian chờ. Triệu chứng nhìn giống 
   <li>Đừng chặn điều hướng vì một quảng cáo. Ad không về thì cho user đi tiếp.</li>
 </ul>
 
-<h2>19. Thay đổi theo phiên bản</h2>
+<h2>21. Thay đổi theo phiên bản</h2>
 
 <table>
 <tr><th>Bản</th><th>Thay đổi</th><th>Cần làm gì khi nâng cấp</th></tr>
@@ -787,10 +1000,15 @@ Sửa ở AdMob, đừng nới thời gian chờ. Triệu chứng nhìn giống 
   <td>Sửa <code>CtaTopView</code> tràn asset ra ngoài native ad view và chữ body không đọc được. Thêm lớp phủ tối cho <code>FullscreenView</code>.</td>
   <td>Đang dùng <code>CtaTopView</code> thì card cao thêm 5dp và chữ body đổi màu.</td>
 </tr>
+<tr>
+  <td><strong>1.1.0</strong></td>
+  <td><strong>Compose:</strong> module <code>freshness-ads-compose</code> với <code>NativeAd</code>, <code>BannerAd</code>, <code>rememberFullScreenAdShowing</code>. <strong>Native:</strong> <code>LoadingNativeAdTemplateView</code> / <code>NativeAdTemplateView</code> bind layout XML của app theo id quy ước. <strong>Rewarded interstitial:</strong> format <code>rewardedInter</code>, <code>loadAndShowRewardedInterAd</code>. <strong>Analytics:</strong> <code>AdsGraph.addListener(AdsListener)</code> với <code>onAdPaid(AdRevenue)</code> cho mọi format, tự gửi <code>ad_impression</code> lên Firebase. <strong>Full-screen:</strong> ad đã nạp hết hạn sau 1 giờ; <code>showInterAdOutcome</code>/<code>showRewardAdOutcome</code> trả <code>AdShowOutcome</code>; <code>isFullScreenAdShowing</code> gộp ba format; <code>openAdExcludedActivities</code>. <strong>Native:</strong> <code>NativeAdOptions</code> (video tắt tiếng mặc định, tỉ lệ media, AdChoices) ghi đè được per placement; nạp lại slot sau click và sau video. <strong>Banner:</strong> <code>BannerSize</code> ANCHORED / INLINE / MREC. <code>settings.enableLogForTester</code> bật log trên release. <strong>Remote Config</strong> <code>ads_id_config</code> ghi đè theo từng field (chỉ gửi phần thay đổi); thêm <code>hf</code>, <code>ids</code> dạng chuỗi thuần, <code>settings</code> key tuỳ ý với <code>remoteConfig.long/bool/string</code>, <code>adUnitCatalog.describe()</code>. Nhánh debug đọc cờ debuggable của app host (trước đây không bao giờ bật trong app host). Firebase và Crashlytics thành tuỳ chọn. Remote Config: dùng giá trị đã activate khi fetch lỗi/throttle, khoảng fetch 1 giờ ở release. Interstitial có guard chống hai lần show chồng nhau; callback GMA hop về main trước khi sửa state. <code>loadAndShowInterAd</code> kiểm frequency cap trước khi nạp. Thêm <code>AdsConfig.isPremium</code>, <code>useRealIdsInDebug</code>, <code>consentTestDeviceIds</code>; overload ngắn <code>showInterAd("key")</code>, <code>loadAndShowRewardAd("key")</code>; <code>resetInterTimer</code> lên interface. <code>isCollapsible</code> deprecated. Các provider chuyển <code>internal</code>.</td>
+  <td><strong>Native video giờ mặc định tắt tiếng</strong> — muốn giữ tiếng thì <code>NativeAdOptions(videoMuted = false)</code>. App đang gọi <code>Timber.plant</code> riêng không bị ảnh hưởng. Payload RC cũ vẫn chạy nguyên (field thiếu giờ giữ của asset thay vì rỗng — chỉ khác khi RC cố ý gửi placement thiếu <code>ids</code>). Đang set <code>AdsGraph.adUnitCatalog.useRealIds</code> thì đổi sang <code>AdsConfig(useRealIdsInDebug = true)</code>. Đang gọi thẳng class <code>*Provider</code> thì đi qua <code>AdsGraph</code>. Splash nên thêm <code>isShowLoading = false</code>. Debug build của app giờ thật sự dùng test id — muốn id thật thì bật cờ trên.</td>
+</tr>
 </table>
 
 <hr>
-<p class="footer">Freshness Ads 1.0.6 — <code>com.github.vuhuyvqh2112:freshness-ads</code></p>
+<p class="footer">Freshness Ads 1.1.0 — <code>com.github.vuhuyvqh2112:freshness-ads</code></p>
 
 </body>
 </html>

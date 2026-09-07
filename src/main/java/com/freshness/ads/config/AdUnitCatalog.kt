@@ -1,5 +1,6 @@
 package com.freshness.ads.config
 
+import com.freshness.ads.natives.NativeAdOptions
 import com.freshness.ads.remoteconfig.RemoteConfig
 
 /**
@@ -37,6 +38,12 @@ interface AdUnitCatalog {
     fun budgetSpecFor(placement: String, fallback: AdBudgetSpec): AdBudgetSpec
 
     /**
+     * Tuỳ chọn request native của placement: [fallback] là `AdsConfig.nativeAdOptions`, từng field bị
+     * payload ghi đè nếu có (`videoMuted`, `mediaAspectRatio`, `adChoicesPlacement`).
+     */
+    fun nativeOptionsFor(placement: String, fallback: NativeAdOptions): NativeAdOptions
+
+    /**
      * Nạp payload mới từ Remote Config. Payload null/rỗng/hỏng đều bị BỎ QUA và giữ nguyên payload đang
      * dùng — không bao giờ tự đẩy catalog về trạng thái rỗng, vì đó là cách nhanh nhất để mất sạch ads.
      */
@@ -47,4 +54,11 @@ interface AdUnitCatalog {
      * asset default). Một chỗ resolve duy nhất cho cả id lẫn setting, tránh hai đường parse lệch nhau.
      */
     fun settingsSnapshot(): RemoteConfig
+
+    /**
+     * Bảng catalog đang có hiệu lực (asset đã được Remote Config ghi đè), mỗi placement một dòng:
+     * format, enable, hf, id theo thứ tự waterfall, ngân sách ghi đè. Để tester đối chiếu với console
+     * Remote Config mà không phải đoán từ log load. Debug build tự in ra sau mỗi lần nạp payload.
+     */
+    fun describe(): String
 }

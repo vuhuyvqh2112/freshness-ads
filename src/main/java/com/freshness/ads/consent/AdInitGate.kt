@@ -62,13 +62,13 @@ object AdInitGate {
     val isResolved: Boolean get() = _state.value != State.Pending
 
     /** Mark the SDK as fully initialized. Call ONLY from the real init callback. */
-    fun markReady() {
+    internal fun markReady() {
         _state.value = State.Ready
     }
 
     /** Mark that init was intentionally skipped (no consent / no app id).
      *  A later genuine init can still flip the gate to Ready. */
-    fun markSkipped() {
+    internal fun markSkipped() {
         if (_state.value == State.Pending) _state.value = State.Skipped
     }
 

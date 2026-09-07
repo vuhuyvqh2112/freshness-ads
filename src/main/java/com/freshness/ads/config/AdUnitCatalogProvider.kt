@@ -1,9 +1,12 @@
 package com.freshness.ads.config
 
 import android.content.Context
-import com.freshness.ads.BuildConfig
+import com.freshness.ads.natives.AdChoicesCorner
+import com.freshness.ads.natives.NativeAdOptions
+import com.freshness.ads.natives.NativeMediaAspectRatio
 import com.freshness.ads.remoteconfig.RemoteConfig
-import com.google.gson.Gson
+import com.google.gson.GsonBuilder
+import com.google.gson.JsonObject
 import timber.log.Timber
 
 private const val TAG = "AdUnitCatalog"
@@ -18,21 +21,26 @@ private fun readDefaultsAsset(context: Context): String? =
     runCatching {
         context.assets.open(DEFAULTS_ASSET).bufferedReader().use { it.readText() }
     }.onFailure {
-        Timber.e(it, "$TAG không đọc được assets/$DEFAULTS_ASSET")
+        Timber.e(it, "$TAG không đọc được assets/$DEFAULTS_ASSET — file có nằm ở app/src/main/assets/ không?")
     }.getOrNull()
 
-class AdUnitCatalogProvider internal constructor(
+internal class AdUnitCatalogProvider(
     private val defaultsJsonLoader: () -> String?,
+    /** Theo cờ debuggable của APP HOST, xem [isHostDebuggable]. */
     private val isDebugBuild: Boolean,
 ) : AdUnitCatalog {
 
-    constructor(context: Context) : this(
+    /** @param useRealIdsInDebug xem [AdsConfig.useRealIdsInDebug]. */
+    constructor(context: Context, useRealIdsInDebug: Boolean) : this(
         defaultsJsonLoader = { readDefaultsAsset(context) },
-        isDebugBuild = BuildConfig.DEBUG,
+        isDebugBuild = context.isHostDebuggable(),
     ) {
-        // Debug muốn dùng id thật thì bật cờ trong ads/build.gradle.kts, không cần sửa code.
-        useRealIds = BuildConfig.USE_REAL_IDS_IN_DEBUG
+        useRealIds = useRealIdsInDebug
     }
+
+    private val gson = GsonBuilder()
+        .registerTypeAdapter(AdIdEntry::class.java, AdIdEntryDeserializer)
+        .create()
 
     /** Payload Remote Config đã parse. null = chưa fetch được lần nào -> dùng [defaults]. */
     @Volatile
@@ -59,7 +67,7 @@ class AdUnitCatalogProvider internal constructor(
 
     override fun idsFor(placement: String): List<String> {
         val config = configFor(placement) ?: run {
-            Timber.w("$TAG placement '$placement' không có trong cả Remote Config lẫn default")
+            Timber.w("$TAG placement '$placement' không có trong cả Remote Config lẫn assets/$DEFAULTS_ASSET — gõ đúng tên key chưa?")
             return emptyList()
         }
         val ids = config.activeIds
@@ -91,17 +99,17 @@ class AdUnitCatalogProvider internal constructor(
     override fun isEnabled(placement: String): Boolean = idsFor(placement).isNotEmpty()
 
     override fun settingsSnapshot(): RemoteConfig {
-        val effective = remote ?: defaults
-        val settings = effective.settings
+        val settings = effectiveSettings()
         // Field thiếu -> giữ default của RemoteConfig, không ép về null: mất splashTimeoutMs sẽ khiến
         // splash rơi về fallback cứng 15s, khác hẳn 30s đang chạy production.
         val fallback = RemoteConfig()
         return RemoteConfig(
-            enableAllAds = effective.enableAllAds ?: fallback.enableAllAds,
-            splashTimeoutMs = settings?.splashTimeoutMs ?: fallback.splashTimeoutMs,
-            interMinIntervalMs = settings?.interMinIntervalMs ?: fallback.interMinIntervalMs,
-            rewardTimeoutMs = settings?.rewardTimeoutMs ?: fallback.rewardTimeoutMs,
+            enableAllAds = remote?.enableAllAds ?: defaults.enableAllAds ?: fallback.enableAllAds,
+            splashTimeoutMs = settings.longOrNull("splashTimeoutMs") ?: fallback.splashTimeoutMs,
+            interMinIntervalMs = settings.longOrNull("interMinIntervalMs") ?: fallback.interMinIntervalMs,
+            rewardTimeoutMs = settings.longOrNull("rewardTimeoutMs") ?: fallback.rewardTimeoutMs,
             isFetched = true,
+            settings = settings,
         )
     }
 
@@ -113,6 +121,15 @@ class AdUnitCatalogProvider internal constructor(
             // ceilingMs = null trong fallback nghĩa là "không giãn" (splash) — payload muốn giãn thì
             // phải khai tường minh, chứ không được vô tình bật lên khi thiếu field.
             ceilingMs = config.ceilingMs ?: fallback.ceilingMs,
+        )
+    }
+
+    override fun nativeOptionsFor(placement: String, fallback: NativeAdOptions): NativeAdOptions {
+        val config = configFor(placement) ?: return fallback
+        return NativeAdOptions(
+            videoMuted = config.videoMuted ?: fallback.videoMuted,
+            mediaAspectRatio = NativeMediaAspectRatio.from(config.mediaAspectRatio) ?: fallback.mediaAspectRatio,
+            adChoicesPlacement = AdChoicesCorner.from(config.adChoicesPlacement) ?: fallback.adChoicesPlacement,
         )
     }
 
@@ -129,20 +146,86 @@ class AdUnitCatalogProvider internal constructor(
         }
         remote = parsed
         Timber.d("$TAG đã nạp payload version=${parsed.version} placements=${parsed.placements?.size ?: 0}")
+        if (isDebugBuild) Timber.i("$TAG catalog hiệu lực:\n${describe()}")
+    }
+
+    override fun describe(): String {
+        val keys = (defaults.placements?.keys.orEmpty() + remote?.placements?.keys.orEmpty()).toSortedSet()
+        val sb = StringBuilder()
+        sb.append("enableAllAds=${remote?.enableAllAds ?: defaults.enableAllAds} settings=${effectiveSettings()}")
+        keys.forEach { key ->
+            val c = configFor(key) ?: return@forEach
+            val source = when {
+                remote?.placements?.get(key) != null && defaults.placements?.get(key) != null -> "asset+remote"
+                remote?.placements?.get(key) != null -> "remote"
+                else -> "asset"
+            }
+            val budget = listOfNotNull(
+                c.baseMs?.let { "base=$it" }, c.tierCapMs?.let { "cap=$it" }, c.ceilingMs?.let { "ceil=$it" },
+            ).joinToString(" ")
+            sb.append("\n  $key [${c.format}] enable=${c.enable != false} hf=${c.hf ?: "-"} ($source)")
+            if (budget.isNotEmpty()) sb.append(" $budget")
+            val active = c.activeIds
+            c.ids.orEmpty().forEachIndexed { i, e ->
+                val id = e?.id ?: "?"
+                val on = id in active
+                sb.append("\n    ${i + 1}. $id${if (on) "" else " (OFF)"}")
+            }
+        }
+        return sb.toString()
     }
 
     /**
-     * Remote Config ghi đè theo TỪNG PLACEMENT, không merge từng field: placement có trong payload thì
-     * payload thắng trọn vẹn, không có thì rơi về default. Merge từng field sẽ khiến việc tắt một id trở
-     * nên khó đoán (không rõ id nào đến từ đâu).
+     * Remote Config ghi đè TỪNG FIELD của placement (xem [AdPlacementConfig.patchedBy]): payload chỉ
+     * cần mang phần thay đổi. Placement chỉ có ở một bên thì lấy nguyên bên đó.
      */
-    private fun configFor(placement: String): AdPlacementConfig? =
-        remote?.placements?.get(placement) ?: defaults.placements?.get(placement)
+    private fun configFor(placement: String): AdPlacementConfig? {
+        val base = defaults.placements?.get(placement)
+        val patch = remote?.placements?.get(placement)
+        return when {
+            patch == null -> base
+            base == null -> patch
+            else -> base.patchedBy(patch)
+        }
+    }
+
+    /** `settings` gộp theo key: key có trên remote thắng, còn lại giữ của asset. */
+    private fun effectiveSettings(): Map<String, Any> {
+        val merged = mutableMapOf<String, Any>()
+        merged.putAll(defaults.settings.toPrimitiveMap())
+        merged.putAll(remote?.settings.toPrimitiveMap())
+        return merged
+    }
 
     private fun parse(json: String?): AdIdConfig? {
         if (json.isNullOrBlank()) return null
-        return runCatching { Gson().fromJson(json, AdIdConfig::class.java) }
+        return runCatching { gson.fromJson(json, AdIdConfig::class.java) }
             .onFailure { Timber.e(it, "$TAG parse ads_id_config thất bại") }
             .getOrNull()
     }
+}
+
+/**
+ * Chỉ giữ giá trị nguyên thuỷ (Boolean / Long / Double / String) để [RemoteConfig.settings] không
+ * lộ kiểu Gson ra API public. Số không có phần thập phân thành Long, có thì Double.
+ */
+private fun JsonObject?.toPrimitiveMap(): Map<String, Any> {
+    if (this == null) return emptyMap()
+    val out = linkedMapOf<String, Any>()
+    entrySet().forEach { (key, el) ->
+        if (!el.isJsonPrimitive) return@forEach
+        val p = el.asJsonPrimitive
+        out[key] = when {
+            p.isBoolean -> p.asBoolean
+            p.isNumber -> p.asString.let { it.toLongOrNull() ?: p.asDouble }
+            else -> p.asString
+        }
+    }
+    return out
+}
+
+private fun Map<String, Any>.longOrNull(key: String): Long? = when (val v = this[key]) {
+    is Number -> v.toLong()
+    is String -> v.toLongOrNull()
+    else -> null
 }

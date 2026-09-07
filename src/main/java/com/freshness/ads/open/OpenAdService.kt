@@ -23,6 +23,17 @@ interface OpenAdService {
 
     suspend fun showAdIfAvailable(activity: WeakReference<Activity>): Boolean
 
+    /**
+     * App-open KHÔNG hiện đè lên activity này khi app quay lại foreground (màn thanh toán, chọn
+     * file, activity quảng cáo của SDK khác…). Seed ban đầu từ `AdsConfig.openAdExcludedActivities`.
+     */
+    fun excludeActivity(activityClass: Class<out Activity>)
+
+    fun includeActivity(activityClass: Class<out Activity>)
+
+    /** true khi [activity] (hoặc lớp cha của nó) nằm trong danh sách loại trừ. */
+    fun isExcluded(activity: Activity?): Boolean
+
     fun reset()
 
 }

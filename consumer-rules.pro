@@ -7,7 +7,6 @@
 -keep class com.freshness.ads.config.AdIdConfig { *; }
 -keep class com.freshness.ads.config.AdIdEntry { *; }
 -keep class com.freshness.ads.config.AdPlacementConfig { *; }
--keep class com.freshness.ads.config.AdSettings { *; }
 -keep class com.freshness.ads.remoteconfig.RemoteConfig { *; }
 
 # Native ad view được inflate từ XML (thẻ <com.freshness.ads.natives.*>) nên chỉ có tên trong
@@ -15,6 +14,11 @@
 -keep public class * extends android.view.View {
     public <init>(android.content.Context, android.util.AttributeSet);
 }
+
+# Crashlytics là compileOnly (tuỳ chọn với app host): app không có nó thì R8 thấy class bị thiếu
+# ở AdsCrashGuard — đó là chủ ý, đừng fail build.
+-dontwarn com.google.firebase.crashlytics.**
+-dontwarn com.google.firebase.analytics.**
 
 # GMA Next-Gen SDK + mediation adapter: adapter được load bằng reflection theo tên class.
 -keep class com.google.android.libraries.ads.mobile.sdk.** { *; }

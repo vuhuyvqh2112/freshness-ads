@@ -7,7 +7,7 @@ plugins {
 // com.github.<user> and the artifact id the repository name. Publishing under any
 // other coordinate builds fine locally and then 404s on JitPack.
 group = "com.github.vuhuyvqh2112"
-version = "1.0.6"
+version = "1.1.0"
 
 android {
     namespace = "com.freshness.ads"
@@ -19,11 +19,6 @@ android {
     defaultConfig {
         minSdk = 26
         consumerProguardFiles("consumer-rules.pro")
-
-        // Debug build mặc định ép test id của Google (không phụ thuộc inventory thật). Đổi thành true
-        // để debug dùng ID THẬT + waterfall thật — bắt buộc khi muốn kiểm tra hành vi rớt tier, vì với
-        // test id thì tier nào cũng fill và không bao giờ rớt xuống tier sau. KHÔNG ảnh hưởng release.
-        buildConfigField("boolean", "USE_REAL_IDS_IN_DEBUG", "false")
     }
 
     compileOptions {
@@ -31,9 +26,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
 
+    // KHÔNG bật buildConfig: `BuildConfig.DEBUG` của thư viện luôn false trong app host (AAR publish
+    // là bản release), nên mọi nhánh "debug" trong SDK đọc cờ debuggable của app host thay vì nó.
     buildFeatures {
         viewBinding = true
-        buildConfig = true
     }
 
     publishing {
@@ -46,7 +42,9 @@ android {
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
-    implementation(libs.androidx.constraintlayout)
+    // `api`: mọi view template public (BaseLoadingNativeAdView…) extends ConstraintLayout, nên app
+    // (và module :compose) phải thấy được supertype đó để gọi setNativeAd / parent.
+    api(libs.androidx.constraintlayout)
     implementation(libs.material)
     // ProcessLifecycleOwner (app-open ad): dùng nội bộ, không lộ ra chữ ký nào.
     implementation(libs.androidx.lifecycle.process)
@@ -67,11 +65,17 @@ dependencies {
     // UMP (User Messaging Platform) cho consent GDPR.
     api(libs.user.messaging.platform)
 
-    // Firebase: app host phải áp cùng BoM để hai bên không lệch version.
+    // Firebase là TUỲ CHỌN với app host: thiếu Firebase thì SDK chạy bằng assets/ads_id_config.json
+    // (xem RemoteConfigProvider). BoM đi cùng để app có Firebase không lệch version.
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.config)
-    // Crashlytics: AdsCrashGuard ghi lại crash nội bộ của UMP dưới dạng non-fatal.
-    implementation(libs.firebase.crashlytics)
+    // Crashlytics chỉ dùng cho MỘT lệnh recordException trong AdsCrashGuard, nên compileOnly: để
+    // implementation là ép mọi app host phải áp plugin Crashlytics, không thì crash lúc khởi động
+    // (eager component "build ID is missing"). Có class lúc chạy thì ghi non-fatal, không thì thôi.
+    compileOnly(platform(libs.firebase.bom))
+    compileOnly(libs.firebase.crashlytics)
+    // Analytics cũng compileOnly: FirebaseAdImpressionLogger gửi `ad_impression` nếu app có, không thì thôi.
+    compileOnly(libs.firebase.analytics)
 
     // Mediation Unity Ads. Không cần khai gì trong manifest và không cần code init: adapter tự nhận
     // cấu hình từ mediation group phía AdMob lúc chạy.

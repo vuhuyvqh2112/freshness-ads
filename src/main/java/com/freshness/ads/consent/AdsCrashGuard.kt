@@ -37,7 +37,7 @@ import timber.log.Timber
  *
  * Remove the relevant branch once a future UMP / ad SDK release fixes the defect.
  */
-object AdsCrashGuard {
+internal object AdsCrashGuard {
 
     @Volatile
     private var installed = false
@@ -62,6 +62,8 @@ object AdsCrashGuard {
                 )
                 // Still report it as a NON-fatal so we can track its frequency in
                 // Crashlytics (it no longer counts as a crash / crash-free-users hit).
+                // Crashlytics là compileOnly: app host không có nó thì NoClassDefFoundError rơi
+                // vào runCatching này và chỉ còn dòng Timber ở trên.
                 runCatching {
                     FirebaseCrashlytics.getInstance().apply {
                         log("AdsCrashGuard: swallowed [$swallowLabel] on '${thread.name}'")

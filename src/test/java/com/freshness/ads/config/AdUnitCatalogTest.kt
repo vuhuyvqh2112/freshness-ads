@@ -161,12 +161,110 @@ class AdUnitCatalogTest {
     }
 
     @Test
-    fun `remote config ghi de tron placement, khong merge tung field`() {
+    fun `ids co mat tren remote thi thay ca danh sach, khong gop tung phan tu`() {
         val catalog = catalog()
         // Default cho inter_splash 2 id; payload chỉ khai 1 -> phải ra đúng 1, không gộp với default.
         catalog.update("""{ "placements": { "inter_splash": { "ids": [ { "id": "id/chi-mot" } ] } } }""")
 
         assertEquals(listOf("id/chi-mot"), catalog.idsFor("inter_splash"))
+    }
+
+    @Test
+    fun `remote ghi de tung field, field thieu giu cua asset`() {
+        val catalog = catalog()
+        // Chỉ tắt placement: không phải paste lại ids, và bật lại thì ids của asset vẫn còn nguyên.
+        catalog.update("""{ "placements": { "inter_splash": { "enable": false } } }""")
+        assertTrue(catalog.idsFor("inter_splash").isEmpty())
+
+        catalog.update("""{ "placements": { "inter_splash": { "enable": true } } }""")
+        assertEquals(listOf("default/hf", "default/all"), catalog.idsFor("inter_splash"))
+
+        // Ghi đè ngân sách mà không nói gì tới ids/format: format vẫn là của asset (debug test id cần nó).
+        catalog.update("""{ "placements": { "inter_splash": { "baseMs": 9000 } } }""")
+        val spec = catalog.budgetSpecFor("inter_splash", AdBudgetSpec(1L, 2L, 3L))
+        assertEquals(9_000L, spec.baseMs)
+        assertEquals(2L, spec.tierCapMs)
+        assertEquals(listOf("default/hf", "default/all"), catalog.idsFor("inter_splash"))
+    }
+
+    @Test
+    fun `hf false chi chay all-price, hf thieu giu het ids`() {
+        val catalog = catalog()
+        catalog.update("""{ "placements": { "inter_splash": { "hf": false } } }""")
+        assertEquals(listOf("default/all"), catalog.idsFor("inter_splash"))
+
+        catalog.update("""{ "placements": { "inter_splash": { "hf": true } } }""")
+        assertEquals(listOf("default/hf", "default/all"), catalog.idsFor("inter_splash"))
+
+        // Không nhắc tới hf -> hành vi cũ, dùng hết ids.
+        catalog.update("""{ "placements": { "inter_splash": { "enable": true } } }""")
+        assertEquals(listOf("default/hf", "default/all"), catalog.idsFor("inter_splash"))
+    }
+
+    @Test
+    fun `ids nhan ca chuoi thuan lan object`() {
+        val catalog = catalog()
+        catalog.update(
+            """
+            { "placements": { "inter_splash": { "ids": [ "id/a", { "id": "id/b", "enable": false }, "id/c" ] } } }
+            """
+        )
+
+        assertEquals(listOf("id/a", "id/c"), catalog.idsFor("inter_splash"))
+    }
+
+    @Test
+    fun `settings key tuy y doc duoc bang getter co kieu, gop theo key voi asset`() {
+        val catalog = catalog()
+        catalog.update("""{ "settings": { "free_episodes": 5, "rate_exit": "true", "label": "x", "ratio": 1.5 } }""")
+        val rc = catalog.settingsSnapshot()
+
+        assertEquals(5L, rc.long("free_episodes", 0L))
+        assertTrue(rc.bool("rate_exit", false))
+        assertEquals("x", rc.string("label", ""))
+        assertEquals(7L, rc.long("khong_co", 7L))
+        // Key của asset không bị mất khi remote không nhắc tới.
+        assertEquals(30_000L, rc.splashTimeoutMs)
+        assertEquals(30_000L, rc.long("splashTimeoutMs", 0L))
+    }
+
+    @Test
+    fun `nativeOptionsFor ghi de tung field, ten enum khong phan biet hoa thuong`() {
+        val catalog = catalog()
+        val fallback = com.freshness.ads.natives.NativeAdOptions(videoMuted = true)
+        // Chưa có gì trên remote -> đúng fallback.
+        assertEquals(fallback, catalog.nativeOptionsFor("native_home", fallback))
+
+        catalog.update("""{ "placements": { "native_home": { "videoMuted": false, "mediaAspectRatio": "portrait", "adChoicesPlacement": "BOTTOM_LEFT" } } }""")
+        val opts = catalog.nativeOptionsFor("native_home", fallback)
+        assertFalse(opts.videoMuted)
+        assertEquals(com.freshness.ads.natives.NativeMediaAspectRatio.PORTRAIT, opts.mediaAspectRatio)
+        assertEquals(com.freshness.ads.natives.AdChoicesCorner.BOTTOM_LEFT, opts.adChoicesPlacement)
+        // ids của asset vẫn còn: options là patch, không thay trọn placement.
+        assertEquals(listOf("default/native"), catalog.idsFor("native_home"))
+
+        // Giá trị lạ -> giữ fallback thay vì crash.
+        catalog.update("""{ "placements": { "native_home": { "mediaAspectRatio": "tron" } } }""")
+        assertEquals(fallback.mediaAspectRatio, catalog.nativeOptionsFor("native_home", fallback).mediaAspectRatio)
+    }
+
+    @Test
+    fun `format rewardedInter co test id rieng va debug ep dung no`() {
+        assertEquals(AdFormat.REWARDED_INTERSTITIAL, AdFormat.from("rewardedInter"))
+        val catalog = catalog(isDebugBuild = true)
+        catalog.update("""{ "placements": { "reward_inter_x": { "format": "rewardedInter", "ids": [ "id/that" ] } } }""")
+        assertEquals(listOf(AdFormat.REWARDED_INTERSTITIAL.testId), catalog.idsFor("reward_inter_x"))
+    }
+
+    @Test
+    fun `describe liet ke placement va danh dau id bi tat`() {
+        val catalog = catalog()
+        catalog.update("""{ "placements": { "inter_splash": { "hf": false } } }""")
+        val text = catalog.describe()
+
+        assertTrue(text.contains("inter_splash [interstitial] enable=true hf=false (asset+remote)"))
+        assertTrue(text.contains("default/hf (OFF)"))
+        assertTrue(text.contains("native_home [native]"))
     }
 
     @Test
@@ -200,6 +298,7 @@ class AdUnitCatalogTest {
         val DEFAULTS = """
             {
               "version": 2,
+              "settings": { "splashTimeoutMs": 30000 },
               "placements": {
                 "inter_splash": { "format": "interstitial", "ids": [
                   { "id": "default/hf" }, { "id": "default/all" } ] },

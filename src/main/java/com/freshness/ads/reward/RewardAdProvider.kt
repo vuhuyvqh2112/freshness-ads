@@ -2,10 +2,13 @@ package com.freshness.ads.reward
 
 import android.app.Activity
 import android.app.Application
-import android.content.Context
 import android.os.SystemClock
 import com.freshness.ads.config.AdBudgets
+import com.freshness.ads.config.AdFormat
 import com.freshness.ads.config.AdUnitCatalog
+import com.freshness.ads.events.AdsEvents
+import com.freshness.ads.manager.AdShowOutcome
+import com.google.android.libraries.ads.mobile.sdk.common.AdValue
 import com.freshness.ads.consent.AdInitGate
 import com.freshness.ads.datastore.AdsDataStore
 import com.freshness.ads.extensions.safeResume
@@ -15,25 +18,45 @@ import com.google.android.libraries.ads.mobile.sdk.common.AdLoadCallback
 import com.google.android.libraries.ads.mobile.sdk.common.AdRequest
 import com.google.android.libraries.ads.mobile.sdk.common.FullScreenContentError
 import com.google.android.libraries.ads.mobile.sdk.common.LoadAdError
-import com.google.android.libraries.ads.mobile.sdk.rewarded.OnUserEarnedRewardListener
+import com.google.android.libraries.ads.mobile.sdk.common.AdEventCallback
 import com.google.android.libraries.ads.mobile.sdk.rewarded.RewardItem
-import com.google.android.libraries.ads.mobile.sdk.rewarded.RewardedAd
-import com.google.android.libraries.ads.mobile.sdk.rewarded.RewardedAdEventCallback
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import java.lang.ref.WeakReference
 
-class RewardAdProvider constructor(
-    private val context: Context,
+/**
+ * Provider cho cả rewarded video lẫn rewarded interstitial: phần khác nhau giữa hai format nằm ở
+ * [kind], toàn bộ waterfall / cache / hạn dùng / màn chờ / callback dùng chung.
+ */
+internal class RewardAdProvider<A : Any>(
     private val dataStore: AdsDataStore,
     private val adLoading: AdLoading,
-    private val catalog: AdUnitCatalog
+    private val catalog: AdUnitCatalog,
+    private val kind: RewardedKind<A>,
 ) : RewardAdService {
 
+    private val TAG = kind.tag
+    private val FORMAT = kind.format
+
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-    private val Rewards = mutableMapOf<RewardAdConfig, RewardAdRequest>()
+
+    /**
+     * Mọi thao tác trên map này CHỈ ở main thread. Callback của GMA next-gen tới trên luồng nền của
+     * nó nên phải hop về main (scope.launch) trước khi chạm vào đây.
+     */
+    private val rewards = mutableMapOf<RewardAdConfig, RewardAdRequest<A>>()
     private val _isShowing = MutableStateFlow(false)
     override val isShowing = _isShowing.asStateFlow()
 
@@ -58,7 +81,7 @@ class RewardAdProvider constructor(
     private val RewardAdConfig.effectiveTimeOut: Long
         get() = catalog.settingsSnapshot().rewardTimeoutMs?.takeIf { it > 0L } ?: timeOut
 
-    private suspend fun loadAdRewardnal(id: String, retry: Int): RewardedAd? =
+    private suspend fun loadAdInternal(id: String, retry: Int): A? =
         suspendCancellableCoroutine { continuation ->
             if (!dataStore.isAdEnabled) {
                 continuation.safeResume(null)
@@ -66,8 +89,8 @@ class RewardAdProvider constructor(
             }
 
             val adRequest = AdRequest.Builder(id).build()
-            RewardedAd.load(adRequest, object : AdLoadCallback<RewardedAd> {
-                override fun onAdLoaded(ad: RewardedAd) {
+            kind.load(adRequest, object : AdLoadCallback<A> {
+                override fun onAdLoaded(ad: A) {
                     Timber.d("$TAG  Ad loaded: $id")
                     continuation.safeResume(ad)
                 }
@@ -77,7 +100,7 @@ class RewardAdProvider constructor(
                     if (retry > 1) {
                         scope.launch {
                             delay(1_000L)
-                            continuation.safeResume(loadAdRewardnal(id, retry - 1))
+                            continuation.safeResume(loadAdInternal(id, retry - 1))
                         }
                     } else {
                         continuation.safeResume(null)
@@ -98,10 +121,11 @@ class RewardAdProvider constructor(
      * (AdMob không cho huỷ) và fill về muộn được [keepLateAd] nhét vào cache cho lần showAd sau —
      * reward là format user chủ động bấm nên fill để dành gần như chắc chắn dùng được.
      */
-    private suspend fun loadWaterfall(config: RewardAdConfig): RewardedAd? {
+    private suspend fun loadWaterfall(config: RewardAdConfig): A? {
         val ids = catalog.idsFor(config.placement)
         if (ids.isEmpty()) {
             Timber.w("$TAG SKIP ${config.placement} (không có id nào bật)")
+            AdsEvents.failedToLoad(config.placement, FORMAT, "no ids")
             return null
         }
         val budget = catalog.budgetSpecFor(config.placement, AdBudgets.forReward(config.effectiveTimeOut)).budgetFor(ids.size)
@@ -113,15 +137,17 @@ class RewardAdProvider constructor(
             )
             if (tierBudget <= 0L) {
                 Timber.w("$TAG WATERFALL ${config.placement} hết ngân sách ở tier ${index + 1}/${ids.size}")
+                AdsEvents.failedToLoad(config.placement, FORMAT, "budget exhausted")
                 return null
             }
             val retry = if (index == ids.lastIndex) config.retryCount else 0
             Timber.d("$TAG WATERFALL ${config.placement} tier=${index + 1}/${ids.size} id=$id cap=${tierBudget}ms")
 
-            val tierJob = scope.async { loadAdRewardnal(id, retry) }
+            val tierJob = scope.async { loadAdInternal(id, retry) }
             val ad = withTimeoutOrNull(tierBudget) { tierJob.await() }
             if (ad != null) {
                 Timber.d("$TAG WATERFALL ${config.placement} tier=${index + 1} FILL")
+                AdsEvents.loaded(config.placement, FORMAT)
                 return ad
             }
             if (tierJob.isActive) {
@@ -132,27 +158,36 @@ class RewardAdProvider constructor(
                 Timber.e("$TAG WATERFALL ${config.placement} tier=${index + 1} NO_FILL")
             }
         }
+        AdsEvents.failedToLoad(config.placement, FORMAT, "no fill")
+        return null
+    }
+
+    /** Ad đã nạp còn trong hạn dùng, hoặc null. Xem [AdBudgets.FULL_SCREEN_AD_TTL_MS]. */
+    private fun RewardAdRequest<A>.liveAd(): A? {
+        val ad = rewardedAd ?: return null
+        if (SystemClock.elapsedRealtime() - loadedAt <= AdBudgets.FULL_SCREEN_AD_TTL_MS) return ad
+        Timber.w("$TAG $placement ad đã hết hạn (${AdBudgets.FULL_SCREEN_AD_TTL_MS / 60_000} phút) — bỏ, nạp lại")
         return null
     }
 
     // getCompleted chỉ hợp lệ bên trong invokeOnCompletion khi error == null, tức job đã xong và
     // không hủy — đúng điều kiện API này đòi.
     @OptIn(ExperimentalCoroutinesApi::class)
-    private fun keepLateAd(config: RewardAdConfig, tierJob: Deferred<RewardedAd?>) {
+    private fun keepLateAd(config: RewardAdConfig, tierJob: Deferred<A?>) {
         tierJob.invokeOnCompletion { error ->
             if (error != null) return@invokeOnCompletion
             val late = tierJob.getCompleted() ?: return@invokeOnCompletion
             scope.launch {
-                if (getRequest(config).RewardedAd == null) {
+                if (getRequest(config).liveAd() == null) {
                     Timber.w("$TAG LATE_FILL ${config.placement} → cache cho lần show sau")
-                    Rewards[config] = getRequest(config).copy(RewardedAd = late)
+                    rewards[config] = getRequest(config).copy(rewardedAd = late, loadedAt = SystemClock.elapsedRealtime())
                 }
             }
         }
     }
 
     override fun loadAd(config: RewardAdConfig) {
-        if (Rewards[config]?.RewardedAd != null || !dataStore.isAdEnabled || Rewards[config]?.job?.isActive == true) {
+        if (rewards[config]?.liveAd() != null || !dataStore.isAdEnabled || rewards[config]?.job?.isActive == true) {
             return
         }
         val job = scope.launch {
@@ -165,31 +200,43 @@ class RewardAdProvider constructor(
             val loadedAd = loadWaterfall(config)
 
             val result = getRequest(config)
-            if (loadedAd != null) Rewards[config] = result.copy(
-                RewardedAd = loadedAd,
+            if (loadedAd != null) rewards[config] = result.copy(
+                rewardedAd = loadedAd,
+                loadedAt = SystemClock.elapsedRealtime(),
             )
         }
         val request = getRequest(config)
-        Rewards[config] = request.copy(job = job)
+        rewards[config] = request.copy(job = job)
     }
 
-    private fun getRequest(config: RewardAdConfig): RewardAdRequest {
-        return Rewards[config] ?: config.asRewardAdRequest()
+    private fun getRequest(config: RewardAdConfig): RewardAdRequest<A> {
+        return rewards[config] ?: RewardAdRequest(placement = config.placement)
     }
 
-    override suspend fun showAd(
+    override suspend fun showAdOutcome(
         activity: WeakReference<Activity>,
         config: RewardAdConfig,
         onShow: () -> Unit,
         onReward: (RewardItem) -> Unit
-    ): Boolean =
+    ): AdShowOutcome =
         suspendCancellableCoroutine { continuation ->
-            if (!dataStore.isAdEnabled || isShowing.value || showInProgress) {
-                continuation.safeResume(false)
-                Timber.e("Hito::showAdReward cannot")
+            if (!dataStore.isAdEnabled) {
+                continuation.safeResume(AdShowOutcome.DISABLED)
+                return@suspendCancellableCoroutine
+            }
+            if (isShowing.value || showInProgress) {
+                Timber.w("$TAG showAd ${config.placement} bỏ qua (showing=${isShowing.value} inProgress=$showInProgress)")
+                continuation.safeResume(AdShowOutcome.ALREADY_SHOWING)
                 return@suspendCancellableCoroutine
             }
             showInProgress = true
+
+            /** Kết thúc một lần show: gỡ cờ, tắt màn chờ, trả kết quả. Luôn chạy trên main. */
+            fun settle(result: AdShowOutcome) {
+                showInProgress = false
+                adLoading.setLoading(false)
+                continuation.safeResume(result)
+            }
 
             scope.launch {
                 val loadingStartedAt = SystemClock.elapsedRealtime()
@@ -201,62 +248,64 @@ class RewardAdProvider constructor(
                 // cached ad AFTER the timeout window on purpose — even if join()
                 // is cancelled at the cap, the still-running load job may have
                 // just cached a fill, and a loaded ad must always be shown.
-                val ad = getRequest(config).RewardedAd ?: run {
+                val ad = getRequest(config).liveAd() ?: run {
                     withTimeoutOrNull(config.effectiveTimeOut) {
                         if (getRequest(config).job?.isActive != true) {
-                            Timber.i("Hito::showAd isActive = false")
                             loadAd(config)
-                        } else {
-                            Timber.i("Hito::showAd isActive = true")
                         }
                         getRequest(config).job?.join()
                     }
-                    getRequest(config).RewardedAd
+                    getRequest(config).liveAd()
                 }
 
-                Timber.i("Hito::AdReward = $ad")
                 if (ad == null) {
                     // Do NOT clear here: a still-running load job may cache this
                     // fill momentarily; leaving it lets the next showAd reuse it
                     // instead of wasting the matched request.
-                    Timber.e("Hito::AdReward = null")
-                    showInProgress = false
-                    adLoading.setLoading(false)
-                    continuation.safeResume(false)
+                    Timber.e("$TAG showAd ${config.placement}: không có ad sau ${config.effectiveTimeOut}ms")
+                    settle(AdShowOutcome.NO_FILL)
                     return@launch
                 }
 
-                ad.adEventCallback = object : RewardedAdEventCallback {
+                // GMA next-gen bắn callback trên luồng nền của nó (thấy rõ trong crash: "FATAL
+                // EXCEPTION: GMA(BG) 5"). State của provider và callback của app đều thuộc main, nên
+                // mọi callback hop về scope (Main) trước khi làm gì.
+                kind.attach(ad, object : AdEventCallback {
                     override fun onAdDismissedFullScreenContent() {
-                        _isShowing.value = false
-                        showInProgress = false
-                        clearConsumedAd(config)
-                        adLoading.setLoading(false)
-                        continuation.safeResume(true)
+                        AdsEvents.closed(config.placement, FORMAT)
+                        scope.launch {
+                            _isShowing.value = false
+                            clearConsumedAd(config)
+                            settle(AdShowOutcome.SHOWN)
+                        }
                     }
 
                     override fun onAdFailedToShowFullScreenContent(
                         fullScreenContentError: FullScreenContentError
                     ) {
-                        Timber.e("Hito::onAdFailedToShowFullScreenContent")
-                        _isShowing.value = false
-                        showInProgress = false
-                        clearConsumedAd(config)
-                        adLoading.setLoading(false)
-                        continuation.safeResume(false)
+                        Timber.e("$TAG onAdFailedToShowFullScreenContent ${config.placement}: ${fullScreenContentError.message}")
+                        AdsEvents.failedToShow(config.placement, FORMAT, fullScreenContentError.message)
+                        scope.launch {
+                            _isShowing.value = false
+                            clearConsumedAd(config)
+                            settle(AdShowOutcome.SHOW_FAILED)
+                        }
                     }
+
+                    override fun onAdImpression() = AdsEvents.impression(config.placement, FORMAT)
+                    override fun onAdClicked() = AdsEvents.clicked(config.placement, FORMAT)
+                    override fun onAdPaid(value: AdValue) = AdsEvents.paid(config.placement, FORMAT, value)
 
                     override fun onAdShowedFullScreenContent() {
                         _isShowing.value = true
+                        AdsEvents.showed(config.placement, FORMAT)
                         // Quảng cáo đã chiếm màn hình: việc của màn chờ kết thúc TẠI ĐÂY, không
                         // phải lúc ad đóng. Tắt muộn hơn thì cờ loading còn true suốt lúc xem
                         // quảng cáo, và spinner hiện lại ngay khi activity app resume lúc đóng ad.
                         adLoading.setLoading(false)
-                        // Cùng lý do với onReward: đo được callback này chạy trên GMA(BG), mà
-                        // onShow là chỗ app ẩn loading của mình / dừng nhạc nền — toàn việc chạm UI.
                         scope.launch { onShow.invoke() }
                     }
-                }
+                })
 
                 // Ad đã sẵn sàng. Giữ màn chờ cho đủ khoảng tối thiểu trước khi bung: ad preload sẵn
                 // thì tới đây mới trôi vài mili giây kể từ cú chạm của người dùng.
@@ -264,28 +313,32 @@ class RewardAdProvider constructor(
                     awaitMinLoadingWindow(loadingStartedAt, config.minLoadingMs)
                 }
 
-                activity.get()?.let {
-                    ad.show(
-                        it
-                    ) { rewardItem ->
-                        Timber.d("User earned the reward: ${rewardItem.amount} ${rewardItem.type}")
-                        // GMA next-gen bắn callback này trên luồng nền của nó (thấy rõ trong crash:
-                        // "FATAL EXCEPTION: GMA(BG) 5"). Mà onReward chính là chỗ app cộng thưởng —
-                        // gần như luôn chạm UI hoặc storage. Đưa về main trước khi giao cho app,
-                        // đừng bắt mọi call site tự nhớ.
+                val host = activity.get()
+                if (host == null) {
+                    Timber.e("$TAG showAd ${config.placement}: activity = null")
+                    settle(AdShowOutcome.NO_ACTIVITY)
+                    return@launch
+                }
+                // show() ném = không có callback nào tới, phải tự gỡ cờ.
+                runCatching {
+                    kind.show(ad, host) { rewardItem ->
+                        Timber.d("$TAG User earned the reward: ${rewardItem.amount} ${rewardItem.type}")
+                        AdsEvents.rewarded(config.placement, rewardItem.amount, rewardItem.type)
+                        // onReward chính là chỗ app cộng thưởng — gần như luôn chạm UI hoặc storage.
+                        // Đưa về main trước khi giao cho app, đừng bắt mọi call site tự nhớ.
                         scope.launch { onReward.invoke(rewardItem) }
                     }
-                } ?: run {
-                    Timber.e("Hito::showAd activity = null")
-                    showInProgress = false
-                    adLoading.setLoading(false)
-                    continuation.safeResume(false)
+                }.onFailure { error ->
+                    Timber.e("$TAG show() failed: ${error.message}")
+                    AdsEvents.failedToShow(config.placement, FORMAT, error.message)
+                    clearConsumedAd(config)
+                    settle(AdShowOutcome.SHOW_FAILED)
                 }
             }
         }
 
     override fun reset() {
-        Rewards.clear()
+        rewards.clear()
         showInProgress = false
         _isShowing.value = false
     }
@@ -299,18 +352,16 @@ class RewardAdProvider constructor(
      * (see [RewardAdConfig.timeOut]) absorbs the first-show latency instead.
      */
     private fun clearConsumedAd(config: RewardAdConfig) {
-        Rewards[config] = getRequest(config).copy(RewardedAd = null)
-        Timber.d("Reward cleared ${Rewards[config]}")
+        rewards[config] = getRequest(config).copy(rewardedAd = null)
+        Timber.d("$TAG reward cleared ${config.placement}")
     }
 
-    companion object {
-        private const val RETRY_COUNT = 2
-        private const val TAG = "RewardAdProvider"
-    }
 }
 
-data class RewardAdRequest(
+internal data class RewardAdRequest<A : Any>(
     val placement: String,
-    val RewardedAd: RewardedAd? = null,
+    val rewardedAd: A? = null,
+    /** `elapsedRealtime` lúc [rewardedAd] được nạp, cho hạn dùng. */
+    val loadedAt: Long = 0L,
     val job: Job? = null
 )

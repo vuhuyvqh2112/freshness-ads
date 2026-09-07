@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shimmer mặc định cho LoadingNativeAdTemplateView khi app không khai adShimmerLayout. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/home_shimmer_color" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="@dimen/size6"
+        android:background="@drawable/shape_ad_view"
+        android:backgroundTint="@color/home_shimmer_color"
+        android:paddingHorizontal="@dimen/size5"
+        android:paddingVertical="@dimen/size1"
+        android:text="Ad"
+        android:textColor="@color/gnt_white"
+        android:textSize="@dimen/size9"
+        android:textStyle="bold" />
+</FrameLayout>

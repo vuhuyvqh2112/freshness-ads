@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Id quy ước cho template native do APP tự vẽ (NativeAdTemplateView / LoadingNativeAdTemplateView).
+  Layout của app đặt đúng các id này là SDK tự bind, không cần class riêng. Bắt buộc: native_ad_view
+  (root NativeAdView). Còn lại tuỳ chọn — thiếu view nào thì asset đó không hiển thị.
+-->
+<resources>
+    <item name="native_ad_view" type="id" />
+    <item name="media_view" type="id" />
+    <item name="icon" type="id" />
+    <item name="primary" type="id" />
+    <item name="body" type="id" />
+    <item name="cta" type="id" />
+    <item name="advertiser" type="id" />
+    <item name="rating_bar" type="id" />
+    <item name="price" type="id" />
+    <item name="rate_price_container" type="id" />
+</resources>

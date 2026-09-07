@@ -2,17 +2,19 @@ package com.freshness.ads.banner
 
 import android.app.Application
 import android.content.Context
-import android.content.res.Resources
 import android.os.Handler
 import android.os.Looper
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import com.freshness.ads.config.AdBudgets
+import com.freshness.ads.config.AdFormat
 import com.freshness.ads.config.AdLoadBudget
 import com.freshness.ads.config.AdUnitCatalog
+import com.freshness.ads.events.AdsEvents
+import com.google.android.libraries.ads.mobile.sdk.banner.BannerAdEventCallback
+import com.google.android.libraries.ads.mobile.sdk.common.AdValue
 import com.freshness.ads.consent.AdInitGate
 import com.freshness.ads.datastore.AdsDataStore
-import com.google.android.libraries.ads.mobile.sdk.banner.AdSize
 import com.google.android.libraries.ads.mobile.sdk.banner.AdView
 import com.google.android.libraries.ads.mobile.sdk.banner.BannerAd
 import com.google.android.libraries.ads.mobile.sdk.banner.BannerAdRequest
@@ -20,7 +22,7 @@ import com.google.android.libraries.ads.mobile.sdk.common.AdLoadCallback
 import com.google.android.libraries.ads.mobile.sdk.common.LoadAdError
 import timber.log.Timber
 
-class AdsBannerProvider constructor(
+internal class AdsBannerProvider(
     private val datastore: AdsDataStore,
     private val catalog: AdUnitCatalog
 ) : AdsBannerService {
@@ -57,7 +59,7 @@ class AdsBannerProvider constructor(
         context: Context,
         bannerView: FrameLayout,
         placement: String,
-        isCollapsible: Boolean,
+        size: BannerSize,
         onLoadSuccess: (() -> Unit)?,
         onLoadFail: (() -> Unit)?
     ) {
@@ -94,7 +96,7 @@ class AdsBannerProvider constructor(
             }
         ) {
             val budget = catalog.budgetSpecFor(placement, AdBudgets.BANNER).budgetFor(ids.size)
-            runOnMain { loadTier(context, bannerView, placement, ids, 0, budget, onLoadSuccess, onLoadFail) }
+            runOnMain { loadTier(context, bannerView, placement, size, ids, 0, budget, onLoadSuccess, onLoadFail) }
         }
     }
 
@@ -102,6 +104,7 @@ class AdsBannerProvider constructor(
         context: Context,
         bannerView: FrameLayout,
         placement: String,
+        size: BannerSize,
         ids: List<String>,
         index: Int,
         budget: AdLoadBudget,
@@ -110,12 +113,14 @@ class AdsBannerProvider constructor(
     ) {
         if (index >= ids.size) {
             Timber.w("$TAG WATERFALL banner $placement cạn tier sau ${ids.size} lần thử")
+            AdsEvents.failedToLoad(placement, FORMAT, "no fill")
             runOnMain { onLoadFail?.invoke() }
             return
         }
         val tierBudget = budget.nextTierBudget(isLastTier = index == ids.lastIndex)
         if (tierBudget <= 0L) {
             Timber.w("$TAG WATERFALL banner $placement hết ngân sách ở tier ${index + 1}/${ids.size}")
+            AdsEvents.failedToLoad(placement, FORMAT, "budget exhausted")
             runOnMain { onLoadFail?.invoke() }
             return
         }
@@ -123,19 +128,9 @@ class AdsBannerProvider constructor(
         val id = ids[index]
         val adView = AdView(context)
 
-        // Full-width large anchored adaptive banner.
-        //
-        // getCurrentOrientationAnchoredAdaptiveBannerAdSize đã deprecated; Google thay bằng bản
-        // "large". CHIỀU CAO TĂNG so với anchored thường (Google đổi mặc định để lấy thêm doanh
-        // thu), nên container banner nào đang khoá chiều cao cứng sẽ cắt mất quảng cáo — để
-        // wrap_content. Kích thước vẫn tự chọn theo bề ngang và xoay màn hình như trước.
-        val displayMetrics = Resources.getSystem().displayMetrics
-        val widthDp = (displayMetrics.widthPixels / displayMetrics.density).toInt()
-        val adSize = AdSize.getLargeAnchoredAdaptiveBannerAdSize(context, widthDp)
-
-        // NOTE: collapsible banner config differs in the next-gen SDK and is not yet
-        // wired here; [isCollapsible] currently loads a standard anchored banner.
-        val request = BannerAdRequest.Builder(id, adSize).build()
+        // Kích thước adaptive tự chọn theo bề ngang và xoay màn hình; container để wrap_content vì
+        // chiều cao do Google trả về (anchored large cao hơn anchored thường, inline cao hơn nữa).
+        val request = BannerAdRequest.Builder(id, size.toAdSize(context)).build()
 
         Timber.d("$TAG WATERFALL banner $placement tier=${index + 1}/${ids.size} id=$id cap=${tierBudget}ms")
         bannerView.addView(adView)
@@ -153,7 +148,7 @@ class AdsBannerProvider constructor(
             settled = true
             Timber.w("$TAG WATERFALL banner $placement tier=${index + 1} TIMEOUT")
             discardTier()
-            loadTier(context, bannerView, placement, ids, index + 1, budget, onLoadSuccess, onLoadFail)
+            loadTier(context, bannerView, placement, size, ids, index + 1, budget, onLoadSuccess, onLoadFail)
         }
         mainHandler.postDelayed(timeout, tierBudget)
 
@@ -171,6 +166,12 @@ class AdsBannerProvider constructor(
                 mainHandler.removeCallbacks(timeout)
                 adViewMap[id] = adView
                 Timber.d("$TAG WATERFALL banner $placement tier=${index + 1} FILL")
+                AdsEvents.loaded(placement, FORMAT)
+                ad.adEventCallback = object : BannerAdEventCallback {
+                    override fun onAdImpression() = AdsEvents.impression(placement, FORMAT)
+                    override fun onAdClicked() = AdsEvents.clicked(placement, FORMAT)
+                    override fun onAdPaid(value: AdValue) = AdsEvents.paid(placement, FORMAT, value)
+                }
                 onLoadSuccess?.invoke()
             }
 
@@ -180,7 +181,7 @@ class AdsBannerProvider constructor(
                 mainHandler.removeCallbacks(timeout)
                 Timber.e("$TAG WATERFALL banner $placement tier=${index + 1} NO_FILL err=${adError.message}")
                 discardTier()
-                loadTier(context, bannerView, placement, ids, index + 1, budget, onLoadSuccess, onLoadFail)
+                loadTier(context, bannerView, placement, size, ids, index + 1, budget, onLoadSuccess, onLoadFail)
             }
         })
     }
@@ -197,6 +198,7 @@ class AdsBannerProvider constructor(
 
     companion object {
         const val TAG = "AdBannerProvider_TAG"
+        private val FORMAT = AdFormat.BANNER
     }
 
 }

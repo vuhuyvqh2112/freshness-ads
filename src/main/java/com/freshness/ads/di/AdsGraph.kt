@@ -10,6 +10,9 @@ import com.freshness.ads.config.AdUnitCatalogProvider
 import com.freshness.ads.consent.ConsentProvider
 import com.freshness.ads.consent.ConsentService
 import com.freshness.ads.datastore.AdsDataStore
+import com.freshness.ads.events.AdsEvents
+import com.freshness.ads.events.AdsListener
+import com.freshness.ads.events.FirebaseAdImpressionLogger
 import com.freshness.ads.inter.InterAdProvider
 import com.freshness.ads.inter.InterAdService
 import com.freshness.ads.loading.AdLoading
@@ -27,6 +30,8 @@ import com.freshness.ads.remoteconfig.RemoteConfigProvider
 import com.freshness.ads.remoteconfig.RemoteConfigService
 import com.freshness.ads.reward.RewardAdProvider
 import com.freshness.ads.reward.RewardAdService
+import com.freshness.ads.reward.RewardedInterstitialKind
+import com.freshness.ads.reward.RewardedVideoKind
 import kotlinx.coroutines.Dispatchers
 
 /**
@@ -49,8 +54,8 @@ object AdsGraph {
         }
 
     /**
-     * Master gate của app host. Mặc định chỉ theo `enableAllAds` trên Remote Config; app có IAP thì
-     * truyền bản riêng vào [install] để nối cờ đã mua.
+     * Master gate của app host. Mặc định theo `enableAllAds` trên Remote Config và
+     * [AdsConfig.isPremium]; app cần logic phức tạp hơn thì truyền bản riêng vào [install].
      */
     private var dataStoreOverride: AdsDataStore? = null
 
@@ -60,12 +65,12 @@ object AdsGraph {
      */
     private var config: AdsConfig = AdsConfig()
 
-    val adUnitCatalog: AdUnitCatalog by lazy { AdUnitCatalogProvider(context) }
+    val adUnitCatalog: AdUnitCatalog by lazy { AdUnitCatalogProvider(context, config.useRealIdsInDebug) }
 
     val remoteConfigService: RemoteConfigService by lazy { RemoteConfigProvider(adUnitCatalog) }
 
     val adsDataStore: AdsDataStore by lazy {
-        dataStoreOverride ?: RemoteFlagAdsDataStore(remoteConfigService)
+        dataStoreOverride ?: RemoteFlagAdsDataStore(remoteConfigService, config.isPremium)
     }
 
     /**
@@ -74,30 +79,40 @@ object AdsGraph {
      */
     val adLoading: AdLoading by lazy { AdLoadingImpl() }
 
-    val consentService: ConsentService by lazy { ConsentProvider(context) }
+    val consentService: ConsentService by lazy { ConsentProvider(context, config) }
 
     val bannerAdService: AdsBannerService by lazy {
         AdsBannerProvider(adsDataStore, adUnitCatalog)
     }
 
     val interAdService: InterAdService by lazy {
-        InterAdProvider(context, adsDataStore, adLoading, adUnitCatalog, config.splashInterstitialPlacement)
+        InterAdProvider(adsDataStore, adLoading, adUnitCatalog, config.splashInterstitialPlacement)
     }
 
     val openAdService: OpenAdService by lazy {
-        OpenAdProvider(context, adsDataStore, adUnitCatalog, config.openAdPlacement)
+        OpenAdProvider(adsDataStore, adUnitCatalog, consentService, config.openAdPlacement, config.openAdExcludedActivities)
     }
 
     val rewardAdService: RewardAdService by lazy {
-        RewardAdProvider(context, adsDataStore, adLoading, adUnitCatalog)
+        RewardAdProvider(adsDataStore, adLoading, adUnitCatalog, RewardedVideoKind)
+    }
+
+    /** Rewarded interstitial: cùng API với rewarded video, placement khai `"format": "rewardedInter"`. */
+    val rewardedInterAdService: RewardAdService by lazy {
+        RewardAdProvider(adsDataStore, adLoading, adUnitCatalog, RewardedInterstitialKind)
     }
 
     val nativeAdService: NativeAdService by lazy {
-        NativeAdProvider(adsDataStore, remoteConfigService, adUnitCatalog)
+        NativeAdProvider(
+            dataStore = adsDataStore,
+            catalog = adUnitCatalog,
+            defaultOptions = config.nativeAdOptions,
+            refillEnabled = { remoteConfigService.remoteConfigValue.bool("nativeRefill", config.nativeRefill) },
+        )
     }
 
     val adPoolManager: AdPoolManager by lazy {
-        AdPoolManager(adsDataStore, adUnitCatalog, context, config.nativePools)
+        AdPoolManager(adsDataStore, adUnitCatalog, context, config.nativePools, config.nativeAdOptions)
     }
 
     val adsManager: AdsManagerService by lazy {
@@ -108,6 +123,7 @@ object AdsGraph {
             _nativeAdService = nativeAdService,
             _adPoolManager = adPoolManager,
             rewardAdService = rewardAdService,
+            rewardedInterAdService = rewardedInterAdService,
             consentService = consentService,
             remoteConfigService = remoteConfigService,
             adUnitCatalog = adUnitCatalog,
@@ -119,11 +135,19 @@ object AdsGraph {
     }
 
     /**
+     * Nhận mọi sự kiện quảng cáo (loaded / impression / click / paid…) cho analytics và attribution.
+     * Gọi được trước hoặc sau [install]; listener chạy trên main thread. Xem [AdsListener].
+     */
+    fun addListener(listener: AdsListener) = AdsEvents.add(listener)
+
+    fun removeListener(listener: AdsListener) = AdsEvents.remove(listener)
+
+    /**
      * Nối graph vào [application] và khởi tạo mọi ad service theo đúng thứ tự
      * (xem [AdsInitializer]). Gọi lại lần thứ hai là no-op.
      *
-     * @param config placement mà SDK tự gọi + pool size của native. Xem [AdsConfig].
-     * @param dataStore master gate riêng của app (IAP…). null = chỉ theo `enableAllAds`.
+     * @param config placement mà SDK tự gọi, pool size của native, cờ premium… Xem [AdsConfig].
+     * @param dataStore master gate riêng của app. null = theo `enableAllAds` + [AdsConfig.isPremium].
      */
     fun install(
         application: Application,
@@ -134,6 +158,9 @@ object AdsGraph {
         app = application
         this.config = config
         dataStoreOverride = dataStore
+        if (config.logAdImpressionToFirebase) {
+            AdsEvents.add(FirebaseAdImpressionLogger(application))
+        }
         AdsInitializer(
             consentService = consentService,
             openAdService = openAdService,
@@ -141,6 +168,7 @@ object AdsGraph {
             interAdService = interAdService,
             nativeAdService = nativeAdService,
             rewardAdService = rewardAdService,
+            rewardedInterAdService = rewardedInterAdService,
             adsManagerService = adsManager,
             remoteConfigService = remoteConfigService,
         ).init(application)
@@ -154,19 +182,21 @@ object AdsGraph {
 }
 
 /**
- * Master gate mặc định: chỉ cờ `enableAllAds` trên Remote Config quyết định. `isPurchased` vẫn
- * đọc/ghi được, nhưng app có IAP thật nên truyền [AdsDataStore] riêng vào [AdsGraph.install] để nối
- * vào nguồn sự thật của mình thay vì set cờ này bằng tay.
+ * Master gate mặc định: `enableAllAds` trên Remote Config AND chưa mua premium.
+ *
+ * Premium lấy từ [isPremium] (lambda app truyền qua [AdsConfig]) — đọc mỗi lần nên mua xong là tắt
+ * ads ngay. `isPurchased` vẫn set tay được cho app chưa nối lambda.
  */
 private class RemoteFlagAdsDataStore(
     private val remoteConfigService: RemoteConfigService,
+    private val isPremium: (() -> Boolean)?,
 ) : AdsDataStore {
 
     override var isPurchased: Boolean = false
 
     override val isAdEnabled: Boolean
         get() {
-            if (isPurchased) return false
+            if (isPurchased || isPremium?.invoke() == true) return false
             // Chỉ `false` tường minh mới tắt: chưa fetch xong thì field là null và ads phải chạy,
             // nếu không lần mở app đầu tiên sẽ không có ad nào.
             return remoteConfigService.remoteConfigValue.enableAllAds != false

@@ -78,6 +78,13 @@ data class AdBudgetSpec(
  */
 object AdBudgets {
 
+    /**
+     * Hạn dùng của interstitial / rewarded đã nạp. AdMob coi ad toàn màn là hết hạn sau ~1 giờ:
+     * đem ad quá hạn đi show là `onAdFailedToShowFullScreenContent` — người dùng nhìn spinner rồi
+     * không có gì. Quá hạn thì bỏ và nạp lại. App-open có hạn riêng 4 giờ theo hướng dẫn của Google.
+     */
+    const val FULL_SCREEN_AD_TTL_MS = 60L * 60 * 1000
+
     /** Interstitial trong app: user vừa bấm nút và đang nhìn dialog loading. */
     val INTER_IN_APP = AdBudgetSpec(baseMs = 6_000L, tierCapMs = 3_000L, ceilingMs = 15_000L)
 

@@ -12,6 +12,7 @@ enum class AdFormat(val tag: String, val testId: String) {
     NATIVE("native", "ca-app-pub-3940256099942544/2247696110"),
     INTERSTITIAL("interstitial", "ca-app-pub-3940256099942544/1033173712"),
     REWARDED("rewarded", "ca-app-pub-3940256099942544/5224354917"),
+    REWARDED_INTERSTITIAL("rewardedInter", "ca-app-pub-3940256099942544/5354046379"),
     APP_OPEN("appOpen", "ca-app-pub-3940256099942544/9257395921"),
     ;
 

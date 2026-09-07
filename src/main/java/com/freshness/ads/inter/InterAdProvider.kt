@@ -2,10 +2,13 @@ package com.freshness.ads.inter
 
 import android.app.Activity
 import android.app.Application
-import android.content.Context
 import android.os.SystemClock
 import com.freshness.ads.config.AdBudgets
+import com.freshness.ads.config.AdFormat
 import com.freshness.ads.config.AdUnitCatalog
+import com.freshness.ads.events.AdsEvents
+import com.freshness.ads.manager.AdShowOutcome
+import com.google.android.libraries.ads.mobile.sdk.common.AdValue
 import com.freshness.ads.consent.AdInitGate
 import com.freshness.ads.datastore.AdsDataStore
 import com.freshness.ads.extensions.safeResume
@@ -17,14 +20,23 @@ import com.google.android.libraries.ads.mobile.sdk.common.FullScreenContentError
 import com.google.android.libraries.ads.mobile.sdk.common.LoadAdError
 import com.google.android.libraries.ads.mobile.sdk.interstitial.InterstitialAd
 import com.google.android.libraries.ads.mobile.sdk.interstitial.InterstitialAdEventCallback
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import java.lang.ref.WeakReference
 
-class InterAdProvider constructor(
-    private val context: Context,
+internal class InterAdProvider(
     private val dataStore: AdsDataStore,
     private val adLoading: AdLoading,
     private val catalog: AdUnitCatalog,
@@ -34,9 +46,21 @@ class InterAdProvider constructor(
 ) : InterAdService {
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+
+    /**
+     * Mọi thao tác trên map này CHỈ ở main thread. Callback của GMA next-gen tới trên luồng nền của
+     * nó nên phải hop về main (scope.launch) trước khi chạm vào đây.
+     */
     private val inters = mutableMapOf<InterAdConfig, InterAdRequest>()
     private val _isShowing = MutableStateFlow(false)
     override val isShowing = _isShowing.asStateFlow()
+
+    /**
+     * true từ lúc một lần showAd được chấp nhận cho tới khi nó kết thúc hẳn (đóng ad / lỗi / no fill).
+     * Không có nó, hai showAd chồng nhau (double-tap trong khoảng min-loading) cùng gán
+     * `ad.adEventCallback`: cái sau đè cái trước, lần gọi đầu không bao giờ được resume.
+     */
+    private var showInProgress = false
 
     override fun init(app: Application) {
         Timber.d("$TAG InterProvider initialized")
@@ -88,6 +112,7 @@ class InterAdProvider constructor(
         val ids = catalog.idsFor(config.placement)
         if (ids.isEmpty()) {
             Timber.w("$TAG SKIP ${config.placement} (không có id nào bật)")
+            AdsEvents.failedToLoad(config.placement, FORMAT, "no ids")
             return null
         }
         val fallback = AdBudgets.forInter(config.timeOut, isSplash = config.placement == splashPlacement)
@@ -100,6 +125,7 @@ class InterAdProvider constructor(
             )
             if (tierBudget <= 0L) {
                 Timber.w("$TAG WATERFALL ${config.placement} hết ngân sách ở tier ${index + 1}/${ids.size}")
+                AdsEvents.failedToLoad(config.placement, FORMAT, "budget exhausted")
                 return null
             }
             // Retry chỉ ở tier cuối — xem KDoc của InterAdConfig.retryCount.
@@ -110,6 +136,7 @@ class InterAdProvider constructor(
             val ad = withTimeoutOrNull(tierBudget) { tierJob.await() }
             if (ad != null) {
                 Timber.d("$TAG WATERFALL ${config.placement} tier=${index + 1} FILL")
+                AdsEvents.loaded(config.placement, FORMAT)
                 return ad
             }
             if (tierJob.isActive) {
@@ -120,6 +147,15 @@ class InterAdProvider constructor(
                 Timber.e("$TAG WATERFALL ${config.placement} tier=${index + 1} NO_FILL")
             }
         }
+        AdsEvents.failedToLoad(config.placement, FORMAT, "no fill")
+        return null
+    }
+
+    /** Ad đã nạp còn trong hạn dùng, hoặc null. Xem [AdBudgets.FULL_SCREEN_AD_TTL_MS]. */
+    private fun InterAdRequest.liveAd(): InterstitialAd? {
+        val ad = interstitialAd ?: return null
+        if (SystemClock.elapsedRealtime() - loadedAt <= AdBudgets.FULL_SCREEN_AD_TTL_MS) return ad
+        Timber.w("$TAG $placement ad đã hết hạn (${AdBudgets.FULL_SCREEN_AD_TTL_MS / 60_000} phút) — bỏ, nạp lại")
         return null
     }
 
@@ -132,16 +168,16 @@ class InterAdProvider constructor(
             if (error != null) return@invokeOnCompletion
             val late = tierJob.getCompleted() ?: return@invokeOnCompletion
             scope.launch {
-                if (getRequest(config).interstitialAd == null) {
+                if (getRequest(config).liveAd() == null) {
                     Timber.w("$TAG LATE_FILL ${config.placement} → cache cho lần show sau")
-                    inters[config] = getRequest(config).copy(interstitialAd = late)
+                    inters[config] = getRequest(config).copy(interstitialAd = late, loadedAt = SystemClock.elapsedRealtime())
                 }
             }
         }
     }
 
     override fun loadAd(config: InterAdConfig) {
-        if (inters[config]?.interstitialAd != null || !dataStore.isAdEnabled || inters[config]?.job?.isActive == true) {
+        if (inters[config]?.liveAd() != null || !dataStore.isAdEnabled || inters[config]?.job?.isActive == true) {
             return
         }
         val job = scope.launch {
@@ -156,6 +192,7 @@ class InterAdProvider constructor(
             val result = getRequest(config)
             if (loadedAd != null) inters[config] = result.copy(
                 interstitialAd = loadedAd,
+                loadedAt = SystemClock.elapsedRealtime(),
             )
         }
         val request = getRequest(config)
@@ -166,12 +203,24 @@ class InterAdProvider constructor(
         return inters[config] ?: config.asInterAdRequest()
     }
 
-    override suspend fun showAd(activity: WeakReference<Activity>, config: InterAdConfig, onShow: () -> Unit): Boolean =
+    override suspend fun showAdOutcome(activity: WeakReference<Activity>, config: InterAdConfig, onShow: () -> Unit): AdShowOutcome =
         suspendCancellableCoroutine { continuation ->
-            if (!dataStore.isAdEnabled || isShowing.value) {
-                continuation.safeResume(false)
-                Timber.e("Hito::showAdInter cannot")
+            if (!dataStore.isAdEnabled) {
+                continuation.safeResume(AdShowOutcome.DISABLED)
                 return@suspendCancellableCoroutine
+            }
+            if (isShowing.value || showInProgress) {
+                Timber.w("$TAG showAd ${config.placement} bỏ qua (showing=${isShowing.value} inProgress=$showInProgress)")
+                continuation.safeResume(AdShowOutcome.ALREADY_SHOWING)
+                return@suspendCancellableCoroutine
+            }
+            showInProgress = true
+
+            /** Kết thúc một lần show: gỡ cờ, tắt màn chờ, trả kết quả. Luôn chạy trên main. */
+            fun settle(result: AdShowOutcome) {
+                showInProgress = false
+                adLoading.setLoading(false)
+                continuation.safeResume(result)
             }
 
             scope.launch {
@@ -179,52 +228,57 @@ class InterAdProvider constructor(
                 if (config.isShowLoading) {
                     adLoading.setLoading(true)
                 }
-                val ad = getRequest(config).interstitialAd ?: withTimeoutOrNull(config.timeOut) {
+                val ad = getRequest(config).liveAd() ?: withTimeoutOrNull(config.timeOut) {
                     if (getRequest(config).job?.isActive != true) {
-                        Timber.i("Hito::showAd isActive = false")
                         loadAd(config)
-                    } else {
-                        Timber.i("Hito::showAd isActive = true")
                     }
                     getRequest(config).job?.join()
-                    getRequest(config).interstitialAd
+                    getRequest(config).liveAd()
                 }
 
-                Timber.i("Hito::AdInter = $ad")
                 if (ad == null) {
-                    Timber.e("Hito::AdInter = null")
+                    Timber.e("$TAG showAd ${config.placement}: không có ad sau ${config.timeOut}ms")
                     reloadAd(config)
-                    adLoading.setLoading(false)
-                    continuation.safeResume(false)
+                    settle(AdShowOutcome.NO_FILL)
                     return@launch
                 }
 
+                // GMA next-gen bắn AdEventCallback trên luồng nền của nó (đo được:
+                // "onShow thread=GMA(BG) 2"). State của provider và onShow của app đều thuộc main,
+                // nên mọi callback hop về scope (Main) trước khi làm gì.
                 ad.adEventCallback = object : InterstitialAdEventCallback {
                     override fun onAdDismissedFullScreenContent() {
-                        _isShowing.value = false
-                        reloadAd(config)
-                        adLoading.setLoading(false)
-                        continuation.safeResume(true)
+                        AdsEvents.closed(config.placement, FORMAT)
+                        scope.launch {
+                            _isShowing.value = false
+                            reloadAd(config)
+                            settle(AdShowOutcome.SHOWN)
+                        }
                     }
 
                     override fun onAdFailedToShowFullScreenContent(
                         fullScreenContentError: FullScreenContentError
                     ) {
-                        Timber.e("Hito::onAdFailedToShowFullScreenContent")
-                        _isShowing.value = false
-                        reloadAd(config)
-                        adLoading.setLoading(false)
-                        continuation.safeResume(false)
+                        Timber.e("$TAG onAdFailedToShowFullScreenContent ${config.placement}: ${fullScreenContentError.message}")
+                        AdsEvents.failedToShow(config.placement, FORMAT, fullScreenContentError.message)
+                        scope.launch {
+                            _isShowing.value = false
+                            reloadAd(config)
+                            settle(AdShowOutcome.SHOW_FAILED)
+                        }
                     }
+
+                    override fun onAdImpression() = AdsEvents.impression(config.placement, FORMAT)
+                    override fun onAdClicked() = AdsEvents.clicked(config.placement, FORMAT)
+                    override fun onAdPaid(value: AdValue) = AdsEvents.paid(config.placement, FORMAT, value)
 
                     override fun onAdShowedFullScreenContent() {
                         _isShowing.value = true
+                        AdsEvents.showed(config.placement, FORMAT)
                         // Quảng cáo đã chiếm màn hình: việc của màn chờ kết thúc TẠI ĐÂY, không
                         // phải lúc ad đóng. Tắt muộn hơn thì cờ loading còn true suốt lúc xem
                         // quảng cáo, và spinner hiện lại ngay khi activity app resume lúc đóng ad.
                         adLoading.setLoading(false)
-                        // GMA next-gen bắn AdEventCallback trên luồng nền của nó (đo được:
-                        // "onShow thread=GMA(BG) 2"). onShow là chỗ app chạm UI, đưa về main.
                         scope.launch { onShow.invoke() }
                     }
                 }
@@ -235,36 +289,46 @@ class InterAdProvider constructor(
                     awaitMinLoadingWindow(loadingStartedAt, config.minLoadingMs)
                 }
 
-                activity.get()?.let {
-                    ad.show(it)
-                } ?: kotlin.run {
-                    Timber.e("Hito::showAd activity = null")
-                    adLoading.setLoading(false)
-                    continuation.safeResume(false)
+                val host = activity.get()
+                if (host == null) {
+                    Timber.e("$TAG showAd ${config.placement}: activity = null")
+                    settle(AdShowOutcome.NO_ACTIVITY)
+                    return@launch
+                }
+                // show() ném = không có callback nào tới, phải tự gỡ cờ.
+                runCatching { ad.show(host) }.onFailure { error ->
+                    Timber.e("$TAG show() failed: ${error.message}")
+                    AdsEvents.failedToShow(config.placement, FORMAT, error.message)
+                    reloadAd(config)
+                    settle(AdShowOutcome.SHOW_FAILED)
                 }
             }
         }
 
     override fun reset() {
         inters.clear()
+        showInProgress = false
+        _isShowing.value = false
     }
 
     private fun reloadAd(config: InterAdConfig) {
         inters[config] = getRequest(config).copy(interstitialAd = null)
-        Timber.d("ReloadAd ${inters[config]}")
+        Timber.d("$TAG reload ${config.placement}")
         if (!getRequest(config).reload || getRequest(config).job?.isActive == true) return
         loadAd(config)
     }
 
     companion object {
-        private const val RETRY_COUNT = 2
         private const val TAG = "InterAdProvider"
+        private val FORMAT = AdFormat.INTERSTITIAL
     }
 }
 
-data class InterAdRequest(
+internal data class InterAdRequest(
     val placement: String,
     val reload: Boolean = true,
     val interstitialAd: InterstitialAd? = null,
+    /** `elapsedRealtime` lúc [interstitialAd] được nạp, cho hạn dùng. */
+    val loadedAt: Long = 0L,
     val job: Job? = null
 )

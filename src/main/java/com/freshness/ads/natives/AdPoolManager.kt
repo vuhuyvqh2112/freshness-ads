@@ -3,9 +3,13 @@ package com.freshness.ads.natives
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import com.freshness.ads.config.AdBudgets
+import com.freshness.ads.config.AdFormat
 import com.freshness.ads.config.AdUnitCatalog
 import com.freshness.ads.config.AdsConfig
+import com.freshness.ads.events.AdsEvents
+import com.google.android.libraries.ads.mobile.sdk.common.AdValue
 import com.freshness.ads.consent.AdInitGate
 import com.freshness.ads.datastore.AdsDataStore
 import com.google.android.libraries.ads.mobile.sdk.common.LoadAdError
@@ -42,6 +46,8 @@ class AdPoolManager constructor(
     private val context: Context,
     /** Xem [AdsConfig.nativePools]. Placement thiếu ở đây dùng [AdsConfig.DEFAULT_POOL_SIZE]. */
     private val poolSizes: Map<String, Int> = emptyMap(),
+    /** Xem [AdsConfig.nativeAdOptions]; catalog ghi đè từng placement. */
+    private val defaultOptions: NativeAdOptions = NativeAdOptions(),
 ) {
 
     /**
@@ -138,7 +144,7 @@ class AdPoolManager constructor(
                 5_000L * (1L shl (pool.consecutiveFailures - 1).coerceAtMost(3)),
                 30_000L
             )
-            if (System.currentTimeMillis() - pool.lastFailTime < cooldownMs) {
+            if (SystemClock.elapsedRealtime() - pool.lastFailTime < cooldownMs) {
                 Timber.d("AdPool[$placement]: Skipping preload, cooldown active (${pool.consecutiveFailures} failures)")
                 return
             }
@@ -199,7 +205,7 @@ class AdPoolManager constructor(
                 val pool = getPool(placement)
                 if (pool.available.isEmpty() && pool.loadingCount == 0) {
                     pool.consecutiveFailures = maxOf(pool.consecutiveFailures, 1)
-                    pool.lastFailTime = System.currentTimeMillis()
+                    pool.lastFailTime = SystemClock.elapsedRealtime()
                     _adReadyEvents.tryEmit(placement)
                 }
             }
@@ -238,7 +244,7 @@ class AdPoolManager constructor(
             if (remaining == 0) {
                 if (loaded == 0) {
                     pool.consecutiveFailures++
-                    pool.lastFailTime = System.currentTimeMillis()
+                    pool.lastFailTime = SystemClock.elapsedRealtime()
                     Timber.w("AdPool[$placement]: Batch produced no ads, failures=${pool.consecutiveFailures}")
                 }
                 if (pool.loadingCount == 0 && pool.available.isEmpty()) {
@@ -255,6 +261,7 @@ class AdPoolManager constructor(
             return
         }
         val budgetSpec = catalog.budgetSpecFor(placement, AdBudgets.NATIVE_POOL)
+        val options = catalog.nativeOptionsFor(placement, defaultOptions)
 
         // Waterfall áp cho TỪNG SLOT, không cho cả batch: slot nào fill sớm thì dừng sớm, slot còn
         // thiếu tự xuống tier dưới thay vì bỏ trống tới lần preload sau (lần đó còn dính backoff).
@@ -268,6 +275,7 @@ class AdPoolManager constructor(
                 placement = placement,
                 ids = ids,
                 budget = budgetSpec.budgetFor(ids.size),
+                options = options,
                 onLoadSuccess = { nativeAd ->
                     runOnMain {
                         if (account(nativeAd)) {
@@ -359,8 +367,12 @@ class AdPoolManager constructor(
         ad.adEventCallback = object : NativeAdEventCallback {
             override fun onAdImpression() {
                 Timber.d("AdPool[$placement]: Impression for key=$key → refilling pool")
+                AdsEvents.impression(placement, AdFormat.NATIVE)
                 runOnMain { preload(placement) }
             }
+
+            override fun onAdClicked() = AdsEvents.clicked(placement, AdFormat.NATIVE)
+            override fun onAdPaid(value: AdValue) = AdsEvents.paid(placement, AdFormat.NATIVE, value)
         }
 
         Timber.d("AdPool[$placement]: Assigned ad to key=$key, remaining=${pool.available.size}")

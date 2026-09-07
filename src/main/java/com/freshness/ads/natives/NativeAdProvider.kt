@@ -4,21 +4,29 @@ import android.app.Application
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.freshness.ads.config.AdBudgets
+import com.freshness.ads.config.AdFormat
 import com.freshness.ads.config.AdUnitCatalog
 import com.freshness.ads.datastore.AdsDataStore
-import com.freshness.ads.remoteconfig.RemoteConfigService
+import com.freshness.ads.events.AdsEvents
+import com.google.android.libraries.ads.mobile.sdk.common.AdValue
+import com.google.android.libraries.ads.mobile.sdk.common.VideoController
 import com.google.android.libraries.ads.mobile.sdk.nativead.NativeAd
 import com.google.android.libraries.ads.mobile.sdk.nativead.NativeAdEventCallback
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import timber.log.Timber
-import kotlin.text.set
 
-class NativeAdProvider constructor(
+internal class NativeAdProvider(
     private val dataStore: AdsDataStore,
-    private val remoteConfig: RemoteConfigService,
-    private val catalog: AdUnitCatalog
+    private val catalog: AdUnitCatalog,
+    /** Xem [com.freshness.ads.config.AdsConfig.nativeAdOptions]; catalog ghi đè từng placement. */
+    private val defaultOptions: NativeAdOptions = NativeAdOptions(),
+    /** Xem [com.freshness.ads.config.AdsConfig.nativeRefill]. Đọc mỗi lần để Remote Config đổi được. */
+    private val refillEnabled: () -> Boolean = { true },
 ) : NativeAdService {
 
     override val isEnable: Boolean get() = dataStore.isAdEnabled
@@ -42,6 +50,15 @@ class NativeAdProvider constructor(
      * biến một matched request suýt bị vứt thành fill tức thì không tốn request mới.
      */
     private val lateAds = mutableMapOf<String, NativeAd>()
+
+    /** Placement đã nạp cho từng key — cần để [refill] nạp lại đúng chỗ. */
+    private val keyPlacements = mutableMapOf<String, String>()
+
+    /**
+     * Key mà người dùng vừa bấm vào ad. Khi app quay lại foreground (từ trang đích của ad), slot đó
+     * được nạp ad mới: ad cũ đã tạo click rồi, thay bằng ad mới là thêm một impression cho cùng chỗ.
+     */
+    private val clickedKeys = mutableSetOf<String>()
 
     // SDK load + impression callbacks may arrive off the main thread; hop back so
     // ad state và cờ impression chỉ bị sửa trên một luồng.
@@ -82,7 +99,52 @@ class NativeAdProvider constructor(
     }
 
     override fun init(app: Application) {
+        ProcessLifecycleOwner.get().lifecycle.addObserver(LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_START) refillClickedSlots()
+        })
+    }
 
+    /** App quay lại foreground: nạp ad mới cho các slot người dùng đã bấm vào. */
+    private fun refillClickedSlots() {
+        if (clickedKeys.isEmpty()) return
+        val keys = clickedKeys.toList()
+        clickedKeys.clear()
+        if (!refillEnabled()) return
+        keys.forEach { key -> refill(key, "click") }
+    }
+
+    /**
+     * Thay ad đang hiển thị ở [key] bằng ad mới, KHÔNG qua trạng thái Loading: slot giữ nguyên ad cũ
+     * cho tới khi ad mới về (không nháy shimmer), no-fill thì giữ ad cũ. Ad cũ chỉ bị huỷ sau khi
+     * ad mới đã emit — view đã bind ad mới nên không còn drawable nào trỏ vào bitmap cũ.
+     */
+    private fun refill(key: String, reason: String) {
+        val placement = keyPlacements[key] ?: return
+        val current = _nativeCaches.value[key] as? NativeAdResult.Success ?: return
+        if (!isEnable) return
+        Timber.d("$TAG REFILL key=$key placement=$placement ($reason)")
+        val ids = catalog.idsFor(placement)
+        NativeAdmobManager.loadWaterfall(
+            isEnableAd = isEnable,
+            placement = placement,
+            ids = ids,
+            budget = budgetFor(placement, ids.size),
+            options = catalog.nativeOptionsFor(placement, defaultOptions),
+            onLoadSuccess = { ad ->
+                runOnMain {
+                    // Slot đã bị release/đổi trong lúc chờ -> ad mới thành ad muộn cho lần sau.
+                    if (_nativeCaches.value[key] !== current) {
+                        keepLateAd(key, ad)
+                        return@runOnMain
+                    }
+                    trackImpression(key, ad)
+                    emit(key, NativeAdResult.Success(ad))
+                    destroySafely(current.nativeAd)
+                }
+            },
+            onLoadFail = { Timber.d("$TAG REFILL key=$key no-fill, giữ ad cũ") },
+            onLateAd = { ad -> keepLateAd(key, ad) },
+        )
     }
 
     /** Nhận ad về muộn của [key], giữ lại cho lần load sau. Ad muộn cũ (nếu có) bị huỷ. */
@@ -117,6 +179,7 @@ class NativeAdProvider constructor(
             placement = placement,
             ids = ids,
             budget = budget,
+            options = catalog.nativeOptionsFor(placement, defaultOptions),
             onLoadSuccess = { ad ->
                 runOnMain {
                     onAdLoaded?.invoke(ad)
@@ -160,6 +223,7 @@ class NativeAdProvider constructor(
     }
 
     private fun loadIntoCache(key: String, placement: String) {
+        keyPlacements[key] = placement
         loadSingle(
             placement = placement,
             cacheKey = key,
@@ -174,10 +238,30 @@ class NativeAdProvider constructor(
      */
     private fun trackImpression(key: String, ad: NativeAd) {
         impressedKeys.remove(key)
+        val placement = keyPlacements[key] ?: key
         ad.adEventCallback = object : NativeAdEventCallback {
             override fun onAdImpression() {
                 Timber.d("$TAG impression recorded key=$key")
+                AdsEvents.impression(placement, AdFormat.NATIVE)
                 runOnMain { impressedKeys.add(key) }
+            }
+
+            override fun onAdClicked() {
+                AdsEvents.clicked(placement, AdFormat.NATIVE)
+                // Người dùng đang rời app sang trang đích; nạp lại khi họ quay về (ON_START).
+                runOnMain { clickedKeys.add(key) }
+            }
+
+            override fun onAdPaid(value: AdValue) = AdsEvents.paid(placement, AdFormat.NATIVE, value)
+        }
+        // Video kết thúc: ad đó đã hết giá trị xem, thay ad mới cho cùng slot.
+        val media = runCatching { ad.mediaContent }.getOrNull() ?: return
+        if (!media.hasVideoContent) return
+        runCatching {
+            media.videoController?.videoLifecycleCallbacks = object : VideoController.VideoLifecycleCallbacks {
+                override fun onVideoEnd() {
+                    runOnMain { if (refillEnabled()) refill(key, "video end") }
+                }
             }
         }
     }
@@ -198,6 +282,7 @@ class NativeAdProvider constructor(
             destroySafely(current.nativeAd)
         }
         impressedKeys.remove(key)
+        clickedKeys.remove(key)
         _nativeCaches.value = _nativeCaches.value.toMutableMap().apply {
             remove(key)
         }
@@ -224,6 +309,7 @@ class NativeAdProvider constructor(
             if (it is NativeAdResult.Success) destroySafely(it.nativeAd)
         }
         impressedKeys.clear()
+        clickedKeys.clear()
         _nativeCaches.value = emptyMap()
     }
 

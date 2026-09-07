@@ -3,12 +3,19 @@
     "Chép file này vào app/src/main/assets/ads_id_config.json rồi thay id thật.",
     "Đây là bản DEFAULT đóng gói trong APK — đỡ cold start khi Remote Config chưa fetch về.",
     "",
-    "Remote Config (key `ads_id_config`) ghi đè theo TỪNG placement: key nào có trên RC thì RC",
-    "thắng trọn vẹn, key nào thiếu thì rơi về file này. Placement không có ở cả hai chỗ = resolve",
-    "rỗng = tắt.",
+    "Remote Config (key `ads_id_config`) ghi đè theo TỪNG FIELD của từng placement: payload chỉ cần",
+    "mang phần thay đổi, vd {\"placements\":{\"native_home\":{\"enable\":false}}} là tắt native_home",
+    "mà không phải paste lại ids. `ids` có mặt thì thay cả danh sách. Placement không có ở cả hai",
+    "chỗ = resolve rỗng = tắt.",
     "",
-    "Thứ tự trong `ids` là thứ tự waterfall: thử id đầu, fail mới xuống id kế. Thêm tầng high-floor",
-    "thì chèn vào ĐẦU mảng. `enable: false` ở cấp id tắt riêng một tầng, ở cấp placement tắt cả chỗ.",
+    "Thứ tự trong `ids` là thứ tự waterfall: thử id đầu, fail mới xuống id kế. Quy ước: id CUỐI là",
+    "all-price, các id trước là high-floor. Mỗi phần tử viết được dạng chuỗi \"ca-app-pub…\" hoặc",
+    "{ \"id\": \"…\", \"enable\": false } để tắt riêng một tầng. `hf: false` tắt cả tầng high-floor",
+    "(chỉ chạy id cuối); thiếu `hf` là dùng hết. `enable: false` ở cấp placement tắt cả chỗ.",
+    "",
+    "`settings` nhận key tuỳ ý của app: đọc bằng AdsGraph.adsManager.remoteConfig.long/bool/string.",
+    "SDK đọc thêm: `enableLogForTester` (bật log trên release), `nativeRefill` (nạp lại native sau click/video).",
+    "Native ghi đè được `videoMuted`, `mediaAspectRatio` (any/landscape/portrait/square), `adChoicesPlacement`.",
     "",
     "Tên placement là do app tự đặt, SDK không ép danh sách nào. Riêng hai key dưới đây SDK tự gọi",
     "nên phải khớp với AdsConfig: `open_all` (app-open) và `inter_splash` (interstitial splash).",
@@ -19,14 +26,17 @@
   "settings": {
     "splashTimeoutMs": 30000,
     "interMinIntervalMs": 20000,
-    "rewardTimeoutMs": 20000
+    "rewardTimeoutMs": 20000,
+    "free_episodes_count": 3
   },
   "placements": {
     "inter_splash": {
       "format": "interstitial",
       "enable": true,
+      "hf": false,
       "ids": [
-        { "id": "ca-app-pub-3940256099942544/1033173712", "enable": true }
+        "ca-app-pub-3940256099942544/1033173712",
+        "ca-app-pub-3940256099942544/1033173712"
       ]
     },
     "open_all": {
@@ -46,6 +56,7 @@
     "native_home": {
       "format": "native",
       "enable": true,
+      "mediaAspectRatio": "landscape",
       "baseMs": 30000,
       "tierCapMs": 8000,
       "ceilingMs": 120000,
@@ -58,6 +69,13 @@
       "enable": true,
       "ids": [
         { "id": "ca-app-pub-3940256099942544/5224354917", "enable": true }
+      ]
+    },
+    "reward_inter_level_end": {
+      "format": "rewardedInter",
+      "enable": true,
+      "ids": [
+        "ca-app-pub-3940256099942544/5354046379"
       ]
     }
   }

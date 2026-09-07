@@ -19,13 +19,14 @@ import timber.log.Timber
  * `Application.onCreate()`. Nhận thẳng instance chứ không phải `Lazy` như bản Hilt, vì [init] chạm
  * tới tất cả — việc trì hoãn khởi tạo đã do graph lo.
  */
-class AdsInitializer(
+internal class AdsInitializer(
     private val consentService: ConsentService,
     private val openAdService: OpenAdService,
     private val bannerAdService: AdsBannerService,
     private val interAdService: InterAdService,
     private val nativeAdService: NativeAdService,
     private val rewardAdService: RewardAdService,
+    private val rewardedInterAdService: RewardAdService,
     private val adsManagerService: AdsManagerService,
     private val remoteConfigService: RemoteConfigService,
 ) {
@@ -41,9 +42,7 @@ class AdsInitializer(
         // AAB uploaded to Play prints no ad logs. With no tree planted, every
         // Timber.d/w call in the ads module is a cheap no-op in release.
         val isDebuggable = (app.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
-        if (isDebuggable && Timber.treeCount == 0) {
-            Timber.plant(Timber.DebugTree())
-        }
+        if (isDebuggable) AdsLogging.plantIfMissing("app host debuggable")
 
         Timber.d("AdsInitializer: Starting initialization... (debuggable=$isDebuggable)")
 
@@ -68,6 +67,7 @@ class AdsInitializer(
         interAdService.init(app)
         nativeAdService.init(app)
         rewardAdService.init(app)
+        rewardedInterAdService.init(app)
 
         // 5. Initialize the ads manager (lifecycle observer, activity tracking)
         adsManagerService.init(app)
