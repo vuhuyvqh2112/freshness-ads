@@ -17,6 +17,65 @@ class AdUnitCatalogTest {
     ) = AdUnitCatalogProvider({ defaultsJson }, isDebugBuild)
 
     @Test
+    fun `settings adTimeoutMs lam deadline tong mac dinh cho moi placement`() {
+        val catalog = catalog()
+        catalog.update(
+            """
+            { "settings": { "adTimeoutMs": 20000 },
+              "placements": { "native_home": { "format": "native", "ids": [ "id/a" ] } } }
+            """
+        )
+
+        val spec = catalog.budgetSpecFor("native_home", AdBudgets.NATIVE_SINGLE)
+        assertEquals(20_000L, spec.budgetFor(tierCount = 1) { 0L }.remaining())
+        // Áp cả cho placement chưa khai gì trong payload.
+        val chuaKhai = catalog.budgetSpecFor("khong_co_trong_payload", AdBudgets.NATIVE_SINGLE)
+        assertEquals(20_000L, chuaKhai.budgetFor(tierCount = 1) { 0L }.remaining())
+    }
+
+    @Test
+    fun `totalMs cua placement thang settings adTimeoutMs`() {
+        val catalog = catalog()
+        catalog.update(
+            """
+            { "settings": { "adTimeoutMs": 20000 },
+              "placements": { "native_home": {
+                  "format": "native", "totalMs": 45000, "ids": [ "id/a" ] } } }
+            """
+        )
+
+        val spec = catalog.budgetSpecFor("native_home", AdBudgets.NATIVE_SINGLE)
+        assertEquals(45_000L, spec.budgetFor(tierCount = 1) { 0L }.remaining())
+    }
+
+    @Test
+    fun `splash inter khong bi settings adTimeoutMs dung vao`() {
+        // Deadline splash còn là duration thanh progress; global ghi đè được là hai thứ lệch nhau.
+        val catalog = catalog()
+        catalog.update("""{ "settings": { "adTimeoutMs": 5000 } }""")
+
+        val spec = catalog.budgetSpecFor("inter_splash", AdBudgets.interSplash(30_000))
+        assertEquals(30_000L, spec.budgetFor(tierCount = 1) { 0L }.remaining())
+    }
+
+    @Test
+    fun `totalMs ghi de duoc theo tung field nhu moi field khac`() {
+        // Remote Config chỉ mang phần thay đổi: asset khai 8s, payload nắn lại 25s mà không phải
+        // paste lại ids.
+        val catalog = catalog(
+            defaultsJson = """
+            { "placements": { "native_home": {
+                "format": "native", "totalMs": 8000, "ids": [ "id/asset" ] } } }
+            """
+        )
+        catalog.update("""{ "placements": { "native_home": { "totalMs": 25000 } } }""")
+
+        val spec = catalog.budgetSpecFor("native_home", AdBudgets.NATIVE_SINGLE)
+        assertEquals(25_000L, spec.budgetFor(tierCount = 1) { 0L }.remaining())
+        assertEquals(listOf("id/asset"), catalog.idsFor("native_home"))
+    }
+
+    @Test
     fun `payload hop le giu dung thu tu waterfall`() {
         val catalog = catalog()
         catalog.update(

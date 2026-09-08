@@ -108,19 +108,37 @@ internal class AdUnitCatalogProvider(
             splashTimeoutMs = settings.longOrNull("splashTimeoutMs") ?: fallback.splashTimeoutMs,
             interMinIntervalMs = settings.longOrNull("interMinIntervalMs") ?: fallback.interMinIntervalMs,
             rewardTimeoutMs = settings.longOrNull("rewardTimeoutMs") ?: fallback.rewardTimeoutMs,
+            adTimeoutMs = settings.longOrNull("adTimeoutMs") ?: fallback.adTimeoutMs,
             isFetched = true,
             settings = settings,
         )
     }
 
+    /**
+     * Deadline tổng, thứ tự ưu tiên từ hẹp tới rộng:
+     *
+     * 1. `placements.<key>.totalMs` — Remote Config, riêng cho placement này;
+     * 2. `fallback.totalMs` — code chốt cứng, hiện chỉ splash inter dùng vì con số đó còn là duration
+     *    thanh progress, không được để global đụng vào;
+     * 3. `settings.adTimeoutMs` — Remote Config, mặc định cho mọi placement;
+     * 4. không có gì ở trên: tính theo `baseMs`/`tierCapMs`/`ceilingMs` như cũ.
+     */
     override fun budgetSpecFor(placement: String, fallback: AdBudgetSpec): AdBudgetSpec {
-        val config = configFor(placement) ?: return fallback
+        val config = configFor(placement)
+        val globalTotal = effectiveSettings().longOrNull("adTimeoutMs")?.takeIf { it > 0 }
+        val totalMs = config?.totalMs?.takeIf { it > 0 }
+            ?: fallback.totalMs?.takeIf { it > 0 }
+            ?: globalTotal
+        // Không return sớm khi placement thiếu config: `settings.adTimeoutMs` phải áp được cho cả
+        // những placement chưa khai gì trong payload.
+        if (config == null) return fallback.copy(totalMs = totalMs)
         return AdBudgetSpec(
             baseMs = config.baseMs ?: fallback.baseMs,
             tierCapMs = config.tierCapMs ?: fallback.tierCapMs,
             // ceilingMs = null trong fallback nghĩa là "không giãn" (splash) — payload muốn giãn thì
             // phải khai tường minh, chứ không được vô tình bật lên khi thiếu field.
             ceilingMs = config.ceilingMs ?: fallback.ceilingMs,
+            totalMs = totalMs,
         )
     }
 

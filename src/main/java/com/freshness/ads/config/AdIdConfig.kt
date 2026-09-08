@@ -44,6 +44,14 @@ data class AdPlacementConfig(
     val baseMs: Long? = null,
     val tierCapMs: Long? = null,
     val ceilingMs: Long? = null,
+    /**
+     * Deadline TỔNG cho một lần load placement này, tính bằng ms — thời gian đi hết cả waterfall chứ
+     * không phải của một id. Khai số này là khỏi phải nhẩm `baseMs + (n-1) * tierCapMs`; ba field
+     * trên bị bỏ qua hoàn toàn.
+     *
+     * Thắng cả `settings.adTimeoutMs`. `<= 0` hoặc thiếu = không dùng.
+     */
+    val totalMs: Long? = null,
     /** Native: ghi đè [com.freshness.ads.natives.NativeAdOptions] của `AdsConfig`. null = dùng mặc định. */
     val videoMuted: Boolean? = null,
     /** Tên trong [com.freshness.ads.natives.NativeMediaAspectRatio]: any / landscape / portrait / square. */
@@ -78,6 +86,7 @@ data class AdPlacementConfig(
         baseMs = patch.baseMs ?: baseMs,
         tierCapMs = patch.tierCapMs ?: tierCapMs,
         ceilingMs = patch.ceilingMs ?: ceilingMs,
+        totalMs = patch.totalMs ?: totalMs,
         videoMuted = patch.videoMuted ?: videoMuted,
         mediaAspectRatio = patch.mediaAspectRatio ?: mediaAspectRatio,
         adChoicesPlacement = patch.adChoicesPlacement ?: adChoicesPlacement,
@@ -90,7 +99,7 @@ data class AdIdConfig(
     val enableAllAds: Boolean? = null,
     /**
      * Setting không thuộc placement nào, KEY TUỲ Ý. SDK đọc `splashTimeoutMs`, `interMinIntervalMs`,
-     * `rewardTimeoutMs`; app host thêm key riêng của mình vào đây và đọc bằng
+     * `rewardTimeoutMs`, `adTimeoutMs`; app host thêm key riêng của mình vào đây và đọc bằng
      * `RemoteConfig.long/bool/string` — một payload, một lần fetch, không phải tự gọi Firebase.
      */
     val settings: JsonObject? = null,

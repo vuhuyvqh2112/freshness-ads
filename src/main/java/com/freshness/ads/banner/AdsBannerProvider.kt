@@ -1,5 +1,6 @@
 package com.freshness.ads.banner
 
+import android.app.Activity
 import android.app.Application
 import android.content.Context
 import android.os.Handler
@@ -37,6 +38,16 @@ internal class AdsBannerProvider(
      * trả về AdView của tier khác với tier vừa load.
      */
     private val adViewMap = mutableMapOf<String, AdView>()
+
+    /**
+     * Placement đang có một waterfall chạy dở.
+     *
+     * [adViewMap] chỉ có entry SAU KHI một tier fill, nên nó không chặn được lượt load thứ hai gọi
+     * vào lúc lượt đầu còn đang bay: cả hai cùng thấy cache rỗng và cùng mở waterfall riêng, tức là
+     * gấp đôi request cho cùng một chỗ đặt ad. Chuyện này xảy ra thật mỗi lần Activity bị dựng lại
+     * giữa chừng (đổi ngôn ngữ, xoay màn) vì màn hình gọi lại `loadBannerAds` trong `onCreate`.
+     */
+    private val loadingPlacements = mutableSetOf<String>()
 
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -83,6 +94,23 @@ internal class AdsBannerProvider(
             return
         }
 
+        if (!loadingPlacements.add(placement)) {
+            Timber.d("$TAG SKIP banner $placement (đã có waterfall đang chạy)")
+            return
+        }
+        // Mọi đường ra của waterfall PHẢI đi qua hai lambda này, nếu không placement kẹt trong
+        // loadingPlacements và không bao giờ load lại được nữa.
+        val finishSuccess = {
+            loadingPlacements.remove(placement)
+            onLoadSuccess?.invoke()
+            Unit
+        }
+        val finishFail = {
+            loadingPlacements.remove(placement)
+            onLoadFail?.invoke()
+            Unit
+        }
+
         // Defer touching the SDK (AdView construction + load) until MobileAds.initialize
         // has completed; otherwise the next-gen SDK throws IllegalStateException.
         AdInitGate.whenReady(
@@ -92,11 +120,11 @@ internal class AdsBannerProvider(
             timeoutMs = AdInitGate.PASSIVE_AWAIT_TIMEOUT_MS,
             onUnavailable = {
                 Timber.w("$TAG SKIP banner $placement (SDK not ready)")
-                onLoadFail?.invoke()
+                runOnMain { finishFail() }
             }
         ) {
             val budget = catalog.budgetSpecFor(placement, AdBudgets.BANNER).budgetFor(ids.size)
-            runOnMain { loadTier(context, bannerView, placement, size, ids, 0, budget, onLoadSuccess, onLoadFail) }
+            runOnMain { loadTier(context, bannerView, placement, size, ids, 0, budget, finishSuccess, finishFail) }
         }
     }
 
@@ -111,13 +139,22 @@ internal class AdsBannerProvider(
         onLoadSuccess: (() -> Unit)?,
         onLoadFail: (() -> Unit)?,
     ) {
+        // Màn hình đặt banner đã chết thì mọi tier còn lại chỉ phát request cho một chỗ không còn ai
+        // nhìn. AdMob không có API huỷ request, nên chặn trước khi phát là chỗ duy nhất chặn được —
+        // và giờ nó đáng giá hơn trước, vì id không còn bị cap nên waterfall sống lâu hơn nhiều.
+        val host = context as? Activity
+        if (host != null && (host.isFinishing || host.isDestroyed)) {
+            Timber.w("$TAG WATERFALL banner $placement dừng ở tier ${index + 1}: activity đã chết")
+            runOnMain { onLoadFail?.invoke() }
+            return
+        }
         if (index >= ids.size) {
             Timber.w("$TAG WATERFALL banner $placement cạn tier sau ${ids.size} lần thử")
             AdsEvents.failedToLoad(placement, FORMAT, "no fill")
             runOnMain { onLoadFail?.invoke() }
             return
         }
-        val tierBudget = budget.nextTierBudget(isLastTier = index == ids.lastIndex)
+        val tierBudget = budget.nextTierBudget()
         if (tierBudget <= 0L) {
             Timber.w("$TAG WATERFALL banner $placement hết ngân sách ở tier ${index + 1}/${ids.size}")
             AdsEvents.failedToLoad(placement, FORMAT, "budget exhausted")
@@ -132,7 +169,7 @@ internal class AdsBannerProvider(
         // chiều cao do Google trả về (anchored large cao hơn anchored thường, inline cao hơn nữa).
         val request = BannerAdRequest.Builder(id, size.toAdSize(context)).build()
 
-        Timber.d("$TAG WATERFALL banner $placement tier=${index + 1}/${ids.size} id=$id cap=${tierBudget}ms")
+        Timber.d("$TAG WATERFALL banner $placement tier=${index + 1}/${ids.size} id=$id budget=${tierBudget}ms")
         bannerView.addView(adView)
 
         var settled = false
@@ -143,14 +180,18 @@ internal class AdsBannerProvider(
             runCatching { adView.destroy() }
         }
 
-        val timeout = Runnable {
+        // KHÔNG phải cap của id này: [tierBudget] là trọn phần còn lại của deadline placement, arm
+        // lại ở mỗi id vẫn ra đúng một mốc tuyệt đối. Nổ = hết giờ cả lượt, nên dừng thẳng chứ không
+        // nhảy sang id sau.
+        val deadline = Runnable {
             if (settled) return@Runnable
             settled = true
-            Timber.w("$TAG WATERFALL banner $placement tier=${index + 1} TIMEOUT")
+            Timber.w("$TAG WATERFALL banner $placement hết deadline khi đang chờ tier ${index + 1}")
+            AdsEvents.failedToLoad(placement, FORMAT, "deadline")
             discardTier()
-            loadTier(context, bannerView, placement, size, ids, index + 1, budget, onLoadSuccess, onLoadFail)
+            runOnMain { onLoadFail?.invoke() }
         }
-        mainHandler.postDelayed(timeout, tierBudget)
+        mainHandler.postDelayed(deadline, tierBudget)
 
         adView.loadAd(request, object : AdLoadCallback<BannerAd> {
             override fun onAdLoaded(ad: BannerAd) = runOnMain {
@@ -163,7 +204,7 @@ internal class AdsBannerProvider(
                     return@runOnMain
                 }
                 settled = true
-                mainHandler.removeCallbacks(timeout)
+                mainHandler.removeCallbacks(deadline)
                 adViewMap[id] = adView
                 Timber.d("$TAG WATERFALL banner $placement tier=${index + 1} FILL")
                 AdsEvents.loaded(placement, FORMAT)
@@ -178,7 +219,7 @@ internal class AdsBannerProvider(
             override fun onAdFailedToLoad(adError: LoadAdError) = runOnMain {
                 if (settled) return@runOnMain
                 settled = true
-                mainHandler.removeCallbacks(timeout)
+                mainHandler.removeCallbacks(deadline)
                 Timber.e("$TAG WATERFALL banner $placement tier=${index + 1} NO_FILL err=${adError.message}")
                 discardTier()
                 loadTier(context, bannerView, placement, size, ids, index + 1, budget, onLoadSuccess, onLoadFail)
@@ -194,6 +235,10 @@ internal class AdsBannerProvider(
             runCatching { adView.destroy() }
         }
         adViewMap.clear()
+        // reset() là teardown toàn bộ: giữ lại entry ở đây sẽ khoá vĩnh viễn placement đó khỏi mọi
+        // lần load sau. Waterfall đang bay (nếu có) vẫn kết thúc bình thường, chỉ là lệnh remove của
+        // nó thành no-op.
+        loadingPlacements.clear()
     }
 
     companion object {

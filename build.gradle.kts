@@ -7,7 +7,7 @@ plugins {
 // multi-module build as com.github.<user>.<repo>:<artifactId> (see settings.gradle.kts).
 // Publishing under any other group builds fine locally and then 404s on JitPack.
 group = "com.github.vuhuyvqh2112"
-version = "1.1.0"
+version = "1.2.0"
 
 android {
     namespace = "com.freshness.ads"

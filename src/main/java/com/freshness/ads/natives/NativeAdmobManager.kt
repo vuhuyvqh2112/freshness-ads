@@ -94,11 +94,11 @@ internal object NativeAdmobManager {
                 return
             }
 
-            val tierBudget = budget.nextTierBudget(isLastTier = index == ids.lastIndex)
-            if (tierBudget <= 0L) {
-                // Không đủ thời gian để chờ tier này -> phát request bây giờ chỉ tạo thêm
+            val leftMs = budget.nextTierBudget()
+            if (leftMs <= 0L) {
+                // Không đủ thời gian để chờ id này -> phát request bây giờ chỉ tạo thêm
                 // matched-but-not-shown. Dừng hẳn.
-                Timber.w("$TAG WATERFALL placement=$placement hết ngân sách ở tier ${index + 1}/${ids.size}")
+                Timber.w("$TAG WATERFALL placement=$placement hết deadline ở tier ${index + 1}/${ids.size}")
                 finish(null)
                 return
             }
@@ -106,15 +106,21 @@ internal object NativeAdmobManager {
             val id = ids[index]
             val startedAt = android.os.SystemClock.elapsedRealtime()
             var tierSettled = false
-            Timber.d("$TAG WATERFALL placement=$placement tier=${index + 1}/${ids.size} id=$id cap=${tierBudget}ms")
+            Timber.d("$TAG WATERFALL placement=$placement tier=${index + 1}/${ids.size} id=$id left=${leftMs}ms")
 
-            val timeout = Runnable {
+            // KHÔNG phải cap của id này: [leftMs] là trọn phần còn lại của deadline placement, nên
+            // arm lại ở mỗi id vẫn ra đúng một mốc tuyệt đối. Cần nó vì id treo không callback thì
+            // không có gì khác cắt được.
+            //
+            // Nổ = hết giờ của CẢ lượt, nên dừng thẳng. Nhảy sang id sau chỉ để nó thấy ngân sách 0
+            // rồi dừng, đọc lên lại thành "id này hết giờ, thử id kế" — sai hẳn ý.
+            val deadline = Runnable {
                 if (tierSettled || finished) return@Runnable
                 tierSettled = true
-                Timber.w("$TAG WATERFALL placement=$placement tier=${index + 1} TIMEOUT sau ${tierBudget}ms")
-                runTier(index + 1)
+                Timber.w("$TAG WATERFALL placement=$placement hết deadline khi đang chờ tier ${index + 1} (${leftMs}ms)")
+                finish(null)
             }
-            mainHandler.postDelayed(timeout, tierBudget)
+            mainHandler.postDelayed(deadline, leftMs)
 
             NativeAdLoader.load(
                 buildRequest(id, options),
@@ -128,7 +134,7 @@ internal object NativeAdmobManager {
                             return
                         }
                         tierSettled = true
-                        mainHandler.removeCallbacks(timeout)
+                        mainHandler.removeCallbacks(deadline)
                         Timber.d("$TAG WATERFALL placement=$placement tier=${index + 1} FILL latency=${latency}ms")
                         finish(nativeAd)
                     }
@@ -137,7 +143,7 @@ internal object NativeAdmobManager {
                         val latency = android.os.SystemClock.elapsedRealtime() - startedAt
                         if (tierSettled || finished) return
                         tierSettled = true
-                        mainHandler.removeCallbacks(timeout)
+                        mainHandler.removeCallbacks(deadline)
                         Timber.e("$TAG WATERFALL placement=$placement tier=${index + 1} NO_FILL latency=${latency}ms err=${adError.message}")
                         runTier(index + 1)
                     }

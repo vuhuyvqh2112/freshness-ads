@@ -13,6 +13,13 @@
     "{ \"id\": \"…\", \"enable\": false } để tắt riêng một tầng. `hf: false` tắt cả tầng high-floor",
     "(chỉ chạy id cuối); thiếu `hf` là dùng hết. `enable: false` ở cấp placement tắt cả chỗ.",
     "",
+    "DEADLINE một lần load = tổng thời gian đi hết cả waterfall, KHÔNG phải của từng id. Ví dụ tổng",
+    "20s với placement 2 id: id đầu no-fill ở giây 10 thì id sau còn 10s, tới giây 20 dừng cả lượt.",
+    "Đặt bằng `settings.adTimeoutMs` (mặc định cho mọi placement) hoặc `placements.<key>.totalMs`",
+    "(riêng một chỗ, thắng global). Không khai gì thì tính `min(baseMs + (số_id-1)*tierCapMs, ceilingMs)`.",
+    "`inter_splash` miễn nhiễm với adTimeoutMs: deadline của nó là splashTimeoutMs, con số đó kiêm",
+    "luôn duration thanh progress trên splash.",
+    "",
     "`settings` nhận key tuỳ ý của app: đọc bằng AdsGraph.adsManager.remoteConfig.long/bool/string.",
     "SDK đọc thêm: `enableLogForTester` (bật log trên release), `nativeRefill` (nạp lại native sau click/video).",
     "Native ghi đè được `videoMuted`, `mediaAspectRatio` (any/landscape/portrait/square), `adChoicesPlacement`.",
@@ -27,6 +34,7 @@
     "splashTimeoutMs": 30000,
     "interMinIntervalMs": 20000,
     "rewardTimeoutMs": 20000,
+    "adTimeoutMs": 20000,
     "free_episodes_count": 3
   },
   "placements": {
@@ -57,9 +65,7 @@
       "format": "native",
       "enable": true,
       "mediaAspectRatio": "landscape",
-      "baseMs": 30000,
-      "tierCapMs": 8000,
-      "ceilingMs": 120000,
+      "totalMs": 30000,
       "ids": [
         { "id": "ca-app-pub-3940256099942544/2247696110", "enable": true }
       ]

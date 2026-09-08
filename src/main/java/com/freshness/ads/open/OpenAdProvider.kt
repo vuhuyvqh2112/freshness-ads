@@ -153,13 +153,13 @@ internal class OpenAdProvider(
         isLoadingAd = true
         try {
             ids.forEachIndexed { index, id ->
-                val tierBudget = budget.nextTierBudget(isLastTier = index == ids.lastIndex)
+                val tierBudget = budget.nextTierBudget()
                 if (tierBudget <= 0L) {
                     Timber.w("$TAG WATERFALL open hết ngân sách ở tier ${index + 1}/${ids.size}")
                     AdsEvents.failedToLoad(placement, FORMAT, "budget exhausted")
                     return false
                 }
-                Timber.d("$TAG WATERFALL open tier=${index + 1}/${ids.size} id=$id cap=${tierBudget}ms")
+                Timber.d("$TAG WATERFALL open tier=${index + 1}/${ids.size} id=$id budget=${tierBudget}ms")
 
                 // Load chạy trong scope riêng nên khi hết cap chỉ có `await` bị huỷ; request vẫn chạy
                 // và fill về muộn vẫn được gán vào [appOpenAd] để lần resume sau dùng.
@@ -171,7 +171,13 @@ internal class OpenAdProvider(
                         AdsEvents.loaded(placement, FORMAT)
                         return true
                     }
-                    loaded == null -> Timber.w("$TAG WATERFALL open tier=${index + 1} TIMEOUT — vẫn hứng ad về muộn")
+                    // withTimeoutOrNull ở trên nhận trọn phần còn lại của deadline placement, không
+                    // phải cap của id này — nên null = hết giờ CẢ lượt, dừng thẳng. Request vẫn chạy
+                    // nền và fill về muộn vẫn được gán vào appOpenAd cho lần resume sau.
+                    loaded == null -> {
+                        Timber.w("$TAG WATERFALL open hết deadline khi đang chờ tier ${index + 1} — vẫn hứng ad về muộn")
+                        return false
+                    }
                     else -> Timber.e("$TAG WATERFALL open tier=${index + 1} NO_FILL")
                 }
             }

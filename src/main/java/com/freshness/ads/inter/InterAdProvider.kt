@@ -119,10 +119,7 @@ internal class InterAdProvider(
         val budget = catalog.budgetSpecFor(config.placement, fallback).budgetFor(ids.size)
 
         ids.forEachIndexed { index, id ->
-            val tierBudget = budget.nextTierBudget(
-                isLastTier = index == ids.lastIndex,
-                waitFullRemaining = true,
-            )
+            val tierBudget = budget.nextTierBudget()
             if (tierBudget <= 0L) {
                 Timber.w("$TAG WATERFALL ${config.placement} hết ngân sách ở tier ${index + 1}/${ids.size}")
                 AdsEvents.failedToLoad(config.placement, FORMAT, "budget exhausted")
@@ -130,7 +127,7 @@ internal class InterAdProvider(
             }
             // Retry chỉ ở tier cuối — xem KDoc của InterAdConfig.retryCount.
             val retry = if (index == ids.lastIndex) config.retryCount else 0
-            Timber.d("$TAG WATERFALL ${config.placement} tier=${index + 1}/${ids.size} id=$id cap=${tierBudget}ms")
+            Timber.d("$TAG WATERFALL ${config.placement} tier=${index + 1}/${ids.size} id=$id budget=${tierBudget}ms")
 
             val tierJob = scope.async { loadAdInternal(id, retry) }
             val ad = withTimeoutOrNull(tierBudget) { tierJob.await() }

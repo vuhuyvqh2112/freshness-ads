@@ -103,8 +103,8 @@
 <table>
 <tr><th>Thứ</th><th>Nghĩa là gì</th></tr>
 <tr><td><strong>Catalog</strong></td><td>Ad unit id không nằm trong code. Chúng nằm trong <code>assets/ads_id_config.json</code>, và Remote Config ghi đè được từng placement — đổi id, tắt một chỗ đặt ad, siết thời gian chờ, tất cả không cần release.</td></tr>
-<tr><td><strong>Waterfall</strong></td><td>Mỗi placement khai được nhiều id xếp theo thứ tự. Id đầu không fill thì tự xuống id kế. Dùng để đặt tầng high-floor phía trên.</td></tr>
-<tr><td><strong>Ngân sách thời gian</strong></td><td>Mỗi format có deadline riêng, và deadline đó chia cho từng tier. Hết ngân sách thì dừng, không để user ngồi chờ một request không bao giờ về.</td></tr>
+<tr><td><strong>Waterfall</strong></td><td>Mỗi placement khai được nhiều id xếp theo thứ tự. Id đầu chờ tới khi AdMob trả no-fill THẬT mới xuống id kế — không id nào bị cắt ngang khi đang chờ. Dùng để đặt tầng high-floor phía trên.</td></tr>
+<tr><td><strong>Ngân sách thời gian</strong></td><td>MỘT deadline cho cả placement, dùng chung cho mọi id. Hết giờ là dừng cả lượt, không để user ngồi chờ một request không bao giờ về. Đặt bằng <code>settings.adTimeoutMs</code> (mọi placement) hoặc <code>totalMs</code> (riêng một chỗ).</td></tr>
 <tr><td><strong>Vòng đời</strong></td><td>Ad được cache, được huỷ đúng lúc view chết, và fill về muộn vẫn được giữ cho lần load sau thay vì vứt đi.</td></tr>
 </table>
 
@@ -226,7 +226,8 @@ App id có dấu <code>~</code>, ad unit id có dấu <code>/</code>. Điền nh
 <tr><td><code>enable</code> (id)</td><td><code>false</code> = tắt riêng một tầng, giữ nguyên các tầng khác.</td></tr>
 <tr><td><code>hf</code> <span class="tag">1.1.0+</span></td><td><code>false</code> = tắt cả tầng high-floor, chỉ chạy id cuối. Thiếu hoặc <code>true</code> = dùng hết <code>ids</code>. Một công tắc để ops bật HF khi có inventory, không phải sửa từng id.</td></tr>
 <tr><td><code>settings.&lt;key&gt;</code> <span class="tag">1.1.0+</span></td><td>Key tuỳ ý của app (số, boolean, chuỗi). Đọc bằng <code>ads.remoteConfig.long("key", default)</code> / <code>bool</code> / <code>string</code> — xem mục 14.</td></tr>
-<tr><td><code>baseMs</code> / <code>tierCapMs</code> / <code>ceilingMs</code></td><td>Ghi đè ngân sách thời gian mặc định của format. Bỏ trống là dùng mặc định.</td></tr>
+<tr><td><code>totalMs</code></td><td><strong>Deadline TỔNG cho một lần load placement này</strong> — thời gian đi hết cả waterfall, không phải của một id. Khai số này là ba field dưới bị bỏ qua. Thắng cả <code>settings.adTimeoutMs</code>.</td></tr>
+<tr><td><code>baseMs</code> / <code>tierCapMs</code> / <code>ceilingMs</code></td><td>Cách tính deadline khi không khai <code>totalMs</code>: <code>min(baseMs + (số_id−1) × tierCapMs, ceilingMs)</code>. <code>tierCapMs</code> chỉ giãn TỔNG theo số id, nó KHÔNG cap từng id.</td></tr>
 </table>
 
 <div class="note">

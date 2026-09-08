@@ -9,7 +9,7 @@ import androidx.annotation.Keep
  * Cả hai đã bị bỏ: công tắc placement giờ nằm trong `ads_id_config.placements.<key>.enable` (một nguồn
  * sự thật duy nhất), và `ads_remote_config` không còn được đọc nữa.
  *
- * Ba field có tên là những setting SDK tự dùng. Mọi key khác app host đặt trong `settings` của
+ * Bốn field có tên là những setting SDK tự dùng. Mọi key khác app host đặt trong `settings` của
  * payload đều đọc được qua [long] / [bool] / [string] — cùng một lần fetch với id quảng cáo, không
  * phải tự gọi Firebase riêng (và không lệch khoảng fetch/throttle với SDK).
  *
@@ -31,6 +31,16 @@ data class RemoteConfig(
      * `<= 0` hoặc thiếu field = dùng `RewardAdConfig.timeOut` mà màn hình gọi khai báo (20s).
      */
     val rewardTimeoutMs: Long? = 20_000L,
+    /**
+     * Deadline TỔNG mặc định cho MỘT lần load bất kỳ placement nào: tổng thời gian đi hết waterfall.
+     *
+     * Ví dụ 20s với placement 2 id: id đầu no-fill ở giây thứ 10 thì id sau còn 10s, tới giây 20 là
+     * dừng cả lượt. Không phải deadline của từng id — không id nào bị cắt ngang khi đang chờ.
+     *
+     * `null`/`<= 0` = giữ cách tính theo `baseMs + (số_id - 1) * tierCapMs`. Placement khai `totalMs`
+     * riêng thì bản riêng thắng, và inter splash thì không bao giờ bị đụng (xem `AdBudgets`).
+     */
+    val adTimeoutMs: Long? = null,
     val isFetched: Boolean? = false,
     /**
      * Toàn bộ `settings` đang có hiệu lực (asset đã được Remote Config ghi đè theo key). Giá trị chỉ
