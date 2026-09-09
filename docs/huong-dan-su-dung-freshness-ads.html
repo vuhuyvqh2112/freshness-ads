@@ -184,10 +184,13 @@ App id có dấu <code>~</code>, ad unit id có dấu <code>/</code>. Điền nh
 
 <p>Chép <code>samples/ads_id_config.json</code> vào <code>app/src/main/assets/ads_id_config.json</code>. Đây là bản mặc định đóng gói trong APK, dùng khi Remote Config chưa fetch về kịp (lần mở app đầu tiên, hoặc mất mạng).</p>
 
+<p>Trích từ cấu hình của một app đang chạy production — <code>samples/ads_id_config.json</code> có bản đầy đủ 14 placement:</p>
+
 <pre><code>{
+  "version": 1,
   "enableAllAds": true,
   "settings": {
-    "splashTimeoutMs": 30000,
+    "splashTimeoutMs": 40000,
     "interMinIntervalMs": 20000,
     "rewardTimeoutMs": 20000,
     "free_episodes_count": 3
@@ -196,28 +199,58 @@ App id có dấu <code>~</code>, ad unit id có dấu <code>/</code>. Điền nh
     "inter_splash": {
       "format": "interstitial",
       "enable": true,
-      "hf": false,
       "ids": [
         "ca-app-pub-xxx/high-floor",
-        { "id": "ca-app-pub-xxx/mid", "enable": false },
         "ca-app-pub-xxx/all-price"
+      ]
+    },
+    "open_all": {
+      "format": "appOpen",
+      "enable": true,
+      "totalMs": 12000,
+      "ids": [ "ca-app-pub-xxx/open" ]
+    },
+    "native_full_splash": {
+      "format": "native",
+      "enable": true,
+      "totalMs": 6000,
+      "ids": [ "ca-app-pub-xxx/native-splash" ]
+    },
+    "native_language_1": {
+      "format": "native",
+      "enable": true,
+      "totalMs": 15000,
+      "ids": [
+        "ca-app-pub-xxx/native-lang-hf",
+        { "id": "ca-app-pub-xxx/native-lang", "enable": true }
       ]
     },
     "native_home": {
       "format": "native",
       "enable": true,
-      "baseMs": 30000,
-      "tierCapMs": 8000,
-      "ceilingMs": 120000,
-      "ids": [
-        { "id": "ca-app-pub-xxx/native-home", "enable": true }
-      ]
+      "totalMs": 12000,
+      "mediaAspectRatio": "landscape",
+      "ids": [ "ca-app-pub-xxx/native-home" ]
+    },
+    "reward_font_large": {
+      "_comment": "Gate tính năng cao cấp. Tắt key này = áp dụng thẳng, không popup.",
+      "format": "rewarded",
+      "enable": true,
+      "totalMs": 20000,
+      "ids": [ "ca-app-pub-xxx/reward" ]
     }
   }
 }</code></pre>
 
+<div class="note">
+<strong>Chọn <code>totalMs</code> theo chỗ user đang đứng, không theo format.</strong>
+Cùng là native nhưng ở splash chỉ có vài giây trước khi user đi tiếp (<code>6000</code>), còn ở màn người ta ngồi lâu thì rộng tay hơn (<code>12000</code>–<code>15000</code>). Đặt số theo thời gian user thật sự còn ở đó, đừng đặt một con số chung cho cả format.
+</div>
+
 <table>
 <tr><th>Trường</th><th>Ý nghĩa</th></tr>
+<tr><td><code>version</code></td><td>Số hiệu payload, do bạn tự tăng. SDK đọc và log ra để đối chiếu bản đang chạy trên máy với bản vừa đẩy lên Remote Config — không có nó thì rất khó biết máy đang dùng payload nào.</td></tr>
+<tr><td><code>_comment</code></td><td>Bị bỏ qua khi parse, ở cấp gốc lẫn cấp placement. Dùng để ghi <em>vì sao</em> một placement tồn tại và tắt nó thì UI đổi ra sao — người tắt công tắc trên Remote Config thường không phải người viết code.</td></tr>
 <tr><td><code>enableAllAds</code></td><td>Công tắc tổng. <code>false</code> là tắt sạch mọi format.</td></tr>
 <tr><td><code>placements.&lt;key&gt;</code></td><td>Tên chỗ đặt ad. <strong>Do bạn tự đặt</strong> — SDK không ép danh sách nào.</td></tr>
 <tr><td><code>format</code></td><td><code>banner</code> · <code>native</code> · <code>interstitial</code> · <code>rewarded</code> · <code>rewardedInter</code> <span class="tag">1.1.0+</span> · <code>appOpen</code>. Quyết định test id dùng ở debug build.</td></tr>

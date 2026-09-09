@@ -1,7 +1,13 @@
 {
+  "version": 1,
   "_comment": [
     "Chép file này vào app/src/main/assets/ads_id_config.json rồi thay id thật.",
     "Đây là bản DEFAULT đóng gói trong APK — đỡ cold start khi Remote Config chưa fetch về.",
+    "",
+    "Bố cục dưới đây lấy từ một app đang chạy production (splash + language + intro + home), giữ",
+    "nguyên để thấy một cấu hình thật trông ra sao. Tên placement là do app tự đặt, SDK không ép",
+    "danh sách nào — đổi hết theo app của bạn. Riêng hai key SDK tự gọi phải khớp với AdsConfig:",
+    "`open_all` (app-open) và `inter_splash` (interstitial splash).",
     "",
     "Remote Config (key `ads_id_config`) ghi đè theo TỪNG FIELD của từng placement: payload chỉ cần",
     "mang phần thay đổi, vd {\"placements\":{\"native_home\":{\"enable\":false}}} là tắt native_home",
@@ -20,36 +26,40 @@
     "`inter_splash` miễn nhiễm với adTimeoutMs: deadline của nó là splashTimeoutMs, con số đó kiêm",
     "luôn duration thanh progress trên splash.",
     "",
+    "Chọn totalMs theo chỗ user đang đứng, không theo format: native ở splash chỉ có vài giây trước",
+    "khi user đi tiếp (6s), native ở màn đứng lâu thì rộng tay hơn (12-15s).",
+    "",
+    "`format` nhận: banner · native · interstitial · rewarded · rewardedInter · appOpen.",
     "`settings` nhận key tuỳ ý của app: đọc bằng AdsGraph.adsManager.remoteConfig.long/bool/string.",
     "SDK đọc thêm: `enableLogForTester` (bật log trên release), `nativeRefill` (nạp lại native sau click/video).",
     "Native ghi đè được `videoMuted`, `mediaAspectRatio` (any/landscape/portrait/square), `adChoicesPlacement`.",
     "",
-    "Tên placement là do app tự đặt, SDK không ép danh sách nào. Riêng hai key dưới đây SDK tự gọi",
-    "nên phải khớp với AdsConfig: `open_all` (app-open) và `inter_splash` (interstitial splash).",
-    "",
-    "Mọi id dưới đây là AD UNIT TEST CHÍNH THỨC CỦA GOOGLE: request nào cũng fill nhưng KHÔNG ra tiền."
+    "Mọi id dưới đây là AD UNIT TEST CHÍNH THỨC CỦA GOOGLE: request nào cũng fill nhưng KHÔNG ra tiền.",
+    "Trước khi phát hành: tạo unit thật trên AdMob, thay id ở đây, rồi đẩy payload lên Remote Config.",
+    "Debug build của app host luôn tự ép test id (đổi bằng AdsConfig(useRealIdsInDebug = true)), nên",
+    "id thật trong file này không ảnh hưởng lúc dev."
   ],
   "enableAllAds": true,
   "settings": {
-    "splashTimeoutMs": 30000,
+    "splashTimeoutMs": 40000,
     "interMinIntervalMs": 20000,
     "rewardTimeoutMs": 20000,
-    "adTimeoutMs": 20000,
     "free_episodes_count": 3
   },
   "placements": {
     "inter_splash": {
+      "_comment": "Deadline lấy từ splashTimeoutMs, không phải totalMs. Hai tier: high-floor rồi all-price.",
       "format": "interstitial",
       "enable": true,
-      "hf": false,
       "ids": [
         "ca-app-pub-3940256099942544/1033173712",
-        "ca-app-pub-3940256099942544/1033173712"
+        "ca-app-pub-3940256099942544/8691691433"
       ]
     },
     "open_all": {
       "format": "appOpen",
       "enable": true,
+      "totalMs": 12000,
       "ids": [
         { "id": "ca-app-pub-3940256099942544/9257395921", "enable": true }
       ]
@@ -57,27 +67,95 @@
     "banner_home": {
       "format": "banner",
       "enable": true,
+      "totalMs": 15000,
       "ids": [
         { "id": "ca-app-pub-3940256099942544/9214589741", "enable": true }
+      ]
+    },
+    "native_full_splash": {
+      "_comment": "Fallback toàn màn khi interstitial splash không fill. 6s vì user sắp rời splash.",
+      "format": "native",
+      "enable": true,
+      "totalMs": 6000,
+      "ids": [
+        { "id": "ca-app-pub-3940256099942544/2247696110", "enable": true }
+      ]
+    },
+    "native_language_1": {
+      "format": "native",
+      "enable": true,
+      "totalMs": 15000,
+      "ids": [
+        "ca-app-pub-3940256099942544/2247696110",
+        "ca-app-pub-3940256099942544/1044960115"
+      ]
+    },
+    "native_language_2": {
+      "format": "native",
+      "enable": true,
+      "totalMs": 15000,
+      "ids": [
+        "ca-app-pub-3940256099942544/2247696110",
+        "ca-app-pub-3940256099942544/1044960115"
+      ]
+    },
+    "native_intro_1": {
+      "format": "native",
+      "enable": true,
+      "ids": [
+        { "id": "ca-app-pub-3940256099942544/2247696110", "enable": true }
+      ]
+    },
+    "native_intro_2": {
+      "format": "native",
+      "enable": true,
+      "totalMs": 12000,
+      "ids": [
+        { "id": "ca-app-pub-3940256099942544/2247696110", "enable": true }
+      ]
+    },
+    "native_intro_3": {
+      "format": "native",
+      "enable": true,
+      "ids": [
+        { "id": "ca-app-pub-3940256099942544/2247696110", "enable": true }
+      ]
+    },
+    "native_obd_full": {
+      "format": "native",
+      "enable": true,
+      "ids": [
+        { "id": "ca-app-pub-3940256099942544/2247696110", "enable": true }
       ]
     },
     "native_home": {
       "format": "native",
       "enable": true,
+      "totalMs": 12000,
       "mediaAspectRatio": "landscape",
-      "totalMs": 30000,
       "ids": [
         { "id": "ca-app-pub-3940256099942544/2247696110", "enable": true }
       ]
     },
-    "reward_feature": {
+    "native_full_open": {
+      "format": "native",
+      "enable": true,
+      "totalMs": 12000,
+      "ids": [
+        { "id": "ca-app-pub-3940256099942544/2247696110", "enable": true }
+      ]
+    },
+    "reward_font_large": {
+      "_comment": "Gate một tính năng cao cấp. Tắt key này = áp dụng thẳng, không popup, và nhãn AD trên nút biến mất — viết rõ ở đây để người tắt công tắc biết trước hệ quả trên UI.",
       "format": "rewarded",
       "enable": true,
+      "totalMs": 20000,
       "ids": [
         { "id": "ca-app-pub-3940256099942544/5224354917", "enable": true }
       ]
     },
     "reward_inter_level_end": {
+      "_comment": "Rewarded interstitial: giống rewarded nhưng có màn giới thiệu và nút bỏ qua trước khi chạy.",
       "format": "rewardedInter",
       "enable": true,
       "ids": [
